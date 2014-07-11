@@ -1,0 +1,201 @@
+###############################################################################
+#
+# Copyright (C) 1996-2006 Standard Performance Evaluation Corporation
+# All Rights Reserved
+#
+# This makefile should NOT be changed.
+# $Id: Makefile.defaults 1641 2006-11-17 03:58:55Z cloyce $
+#
+###############################################################################
+#	BENCHMARK	-- standard definitions for this benchmark
+
+#NUMBER    = 
+#NAME      = 
+#EXEBASE   =
+#OFILES    =
+LIBS       = 
+
+TUNE=peak
+EXT=.none
+
+vpath % ../../src
+
+
+###############################################################################
+#	DEFINES		-- standard definitions for SPEC
+#                          these may be overriden in Makefile.spec
+BENCHMARK     = $(NUMBER).$(NAME)
+FINAL_SOURCES = $(filter-out $(RM_SOURCES),$(SOURCES)) $(EXTRA_SOURCES)
+OBJS          = $(addsuffix $(OBJ),$(basename $(FINAL_SOURCES)))
+
+#CC            = cc
+CFLAGS        = $(EXTRA_CFLAGS) $(PORTABILITY) $(CPORTABILITY)
+COBJOPT       = $(OBJOPT)
+CLDOPT        = $(LDOPT) $(PORTABILITY) 
+
+#CXX	      = CC
+CXXFLAGS      = $(EXTRA_CXXFLAGS) $(PORTABILITY) $(CXXPORTABILITY)
+CXXOBJOPT     = $(OBJOPT)
+CXXLDOPT      = $(LDOPT) $(PORTABILITY)
+
+#FC            = f90
+FFLAGS        = $(EXTRA_FFLAGS) $(PORTABILITY) $(FPORTABILITY)
+FOBJOPT       = $(OBJOPT)
+FLDOPT        = $(LDOPT) $(PORTABILITY)
+
+#F77           = f77
+F77FLAGS      = $(EXTRA_F77FLAGS) $(PORTABILITY) $(F77PORTABILITY)
+F77OBJOPT     = $(OBJOPT)
+F77LDOPT      = $(LDOPT) $(PORTABILITY)
+
+RMRF          = rm -rf
+#LD            = $(CC) $(CFLAGS)
+LDFLAGS       = $(EXTRA_LDFLAGS) $(LDLANGFLAGS)
+OPTIMIZE      = $(EXTRA_OPTIMIZE) 
+SPECSHELL     = /bin/sh
+ECHO          = echo
+PATHSEP       = /
+
+ifeq ($(OS),Windows_NT)
+    OBJ           = .obj
+    OBJOPT        = -c -Fo$@
+    LDOPT         = -Fe$@
+    MATHLIBOPT    =
+    CP            = copy
+    RMRF          = del /q 
+else
+    OBJ           = .o
+    OBJOPT        = -c -o $@
+    LDOPT         = -o $@
+    MATHLIBOPT    = -lm
+    CP            = cp
+endif
+
+ifdef NEED_MATH
+    MATH_LIBS       = $(MATHLIBOPT)
+endif
+
+ifdef NEED_VPATH_INCLUDE
+    VPATH_CXXFLAGS=$(VPATH_INCLUDE) $(VPATH_CXXINCLUDE) 
+    VPATH_CFLAGS  =$(VPATH_INCLUDE) $(VPATH_CINCLUDE) 
+    VPATH_FFLAGS  =$(VPATH_INCLUDE) $(VPATH_FINCLUDE) 
+    VPATH_F77FLAGS=$(VPATH_INCLUDE) $(VPATH_F77INCLUDE) 
+endif
+
+ifdef FDO
+        FDO_FLAGS        =$($(FDO)_FLAGS) $($(FDO)_OPTIMIZE) 
+	FDO_CFLAGS       =$($(FDO)_CFLAGS) $($(FDO)_COPTIMIZE)
+	FDO_CXXFLAGS     =$($(FDO)_CXXFLAGS) $($(FDO)_CXXOPTIMIZE)
+	FDO_FFLAGS       =$($(FDO)_FFLAGS) $($(FDO)_FOPTIMIZE)
+	FDO_F77FLAGS     =$($(FDO)_F77FLAGS) $($(FDO)_F77OPTIMIZE)
+
+	FDO_LDFLAGS   =$($(FDO)_LDFLAGS) $($(FDO)_OPTIMIZE) 
+	FDO_LDCFLAGS  =$($(FDO)_LDCFLAGS) $($(FDO)_COPTIMIZE)
+	FDO_LDCXXFLAGS=$($(FDO)_LDCXXFLAGS) $($(FDO)_CXXOPTIMIZE)
+	FDO_LDFFLAGS  =$($(FDO)_LDFFLAGS) $($(FDO)_FOPTIMIZE)
+	FDO_LDF77FLAGS=$($(FDO)_LDF77FLAGS) $($(FDO)_F77OPTIMIZE)
+endif
+
+FINAL_CFLAGS=$(FLAGS) $(CFLAGS) $(FDO_FLAGS) $(FDO_CFLAGS) $(BENCH_FLAGS) $(BENCH_CFLAGS) $(OS_FLAGS) $(OS_CFLAGS) $(VPATH_CFLAGS) $(OPTIMIZE) $(COPTIMIZE) $(SOURCE_PREFIX_C)
+FINAL_CXXFLAGS=$(FLAGS) $(CXXFLAGS) $(FDO_FLAGS) $(FDO_CXXFLAGS) $(BENCH_FLAGS) $(BENCH_CXXFLAGS) $(OS_FLAGS) $(OS_CXXFLAGS) $(VPATH_CXXFLAGS) $(OPTIMIZE) $(CXXOPTIMIZE) $(SOURCE_PREFIX_CXX)
+FINAL_FFLAGS=$(FLAGS) $(FFLAGS) $(FDO_FLAGS) $(FDO_FFLAGS) $(BENCH_FLAGS) $(BENCH_FFLAGS) $(OS_FLAGS) $(OS_FFLAGS) $(VPATH_FFLAGS) $(OPTIMIZE) $(FOPTIMIZE) $(SOURCE_PREFIX_F)
+FINAL_F77FLAGS=$(FLAGS) $(F77FLAGS) $(FDO_FLAGS) $(FDO_F77FLAGS) $(BENCH_FLAGS) $(BENCH_F77FLAGS) $(OS_FLAGS) $(OS_F77FLAGS) $(VPATH_F77FLAGS) $(OPTIMIZE) $(F77OPTIMIZE) $(SOURCE_PREFIX_F77)
+
+
+
+###############################################################################
+#	VENDOR		   -- where we include any vendor specific information
+ifndef NOINC
+#	include Makefile.spec
+endif
+
+###############################################################################
+#	LANGUAGE SELECTION -- choose flags for specific language
+
+F77C = $(F77)
+CXXC = $(CXX)
+
+LD   = $($(BENCHLANG)C)
+ifneq ($($(BENCHLANG)LD),)
+    LD = $($(BENCHLANG)LD)
+endif
+LDOPTFLAGS  = $(OPTIMIZE) $($(BENCHLANG)OPTIMIZE) $(PORTABILITY)
+LDCOMPFLAGS = $(FINAL_$(BENCHLANG)FLAGS) $($(BENCHLANG)PORTABILITY)
+LANGFLAGS   = $($(BENCHLANG)FLAGS) $(FDO_$(BENCHLANG)FLAGS)
+LDLANGFLAGS = $($(BENCHLANG)LDFLAGS) $(FDO_LD$(BENCHLANG)FLAGS)
+
+
+###############################################################################
+#	TARGETS		-- Rules to build benchmark executables
+#error: 
+#	@$(ECHO) "This makefile is only used for building binaries now"
+#	@$(ECHO) "to run the SPEC suite please use 'runspec'"
+#	@$(ECHO)
+
+all: build
+
+# template build target, should work for simple builds
+ifdef ONESTEP
+$(EXEBASE): $(FINAL_SOURCES)
+	$(LD) $(LDLANGFLAGS) $(LDCOMPFLAGS) $(FDO_LDFLAGS) $^ $(OS_LIBS) $(LIBS) $(MATH_LIBS) $(EXTRA_LIBS) $(LDOPT)
+else
+$(EXEBASE): $(OBJS)
+ifndef NEEDATFILE
+	$(LD) $(LDFLAGS) $(FDO_LDFLAGS) $(LDOPTFLAGS) $^ $(OS_LIBS) $(LIBS) $(MATH_LIBS) $(EXTRA_LIBS) $(LDOPT)
+else
+	$(LD) $(LDFLAGS) $(FDO_LDFLAGS) $(LDOPTFLAGS) @objectnames $(OS_LIBS) $(LIBS) $(MATH_LIBS) $(EXTRA_LIBS) $(LDOPT)
+endif
+endif
+
+options:
+ifdef ONESTEP
+	@echo "LINK: $(LD) $(LDLANGFLAGS) $(LDCOMPFLAGS) $(FDO_LDFLAGS) $^ $(OS_LIBS) $(LIBS) $(MATH_LIBS) $(EXTRA_LIBS) $(LDOPT)";
+else
+	@echo "COMP: $($(BENCHLANG)C) $($(BENCHLANG)OBJOPT)$(OBJ) $(FINAL_$(BENCHLANG)FLAGS)"
+	@echo "LINK: $(LD) $(LDFLAGS) $(FDO_LDFLAGS) $(LDOPTFLAGS) $^ $(OS_LIBS) $(LIBS) $(MATH_LIBS) $(EXTRA_LIBS) $(LDOPT)"
+endif
+
+.SUFFIXES: $(OBJ)
+%$(OBJ): %.c
+	$(CC) $(COBJOPT) $(FINAL_CFLAGS) $<
+ifdef NEEDATFILE
+	$(ECHO) $@ >> objectnames
+endif
+%$(OBJ): %.cc
+	$(CXXC) $(CXXOBJOPT) $(FINAL_CXXFLAGS) $<
+ifdef NEEDATFILE
+	$(ECHO) $@ >> objectnames
+endif
+%$(OBJ): %.f90
+	$(FC) $(FOBJOPT) $(FINAL_FFLAGS) $<
+ifdef NEEDATFILE
+	$(ECHO) $@ >> objectnames
+endif
+ifdef FPBASE
+%$(OBJ): %.f
+	$(FC) $(FOBJOPT) $(FINAL_FFLAGS) $<
+ifdef NEEDATFILE
+	$(ECHO) $@ >> objectnames
+endif
+else
+%$(OBJ): %.f
+	$(F77C) $(F77OBJOPT) $(FINAL_F77FLAGS) $<
+ifdef NEEDATFILE
+	$(ECHO) $@ >> objectnames
+endif
+endif
+
+# to clean things up
+.PHONY: fdoclean clean install
+fdoclean:
+	$(RMRF) $(EXEBASE) $(EXEBASE).exe *$(OBJ) $(EXTRA_RMFILES) objectnames
+clean:
+	-$(RMRF) $(EXEBASE) $(EXEBASE).exe *$(OBJ) $(EXTRA_RMFILES) core *.err *.out
+ifdef NEEDATFILE
+	-$(RMRF) objectnames
+endif
+
+install: $(EXEBASE)
+	$(CP) $(EXEBASE) ../run/app_$(EXEBASE)_$(TUNE)
+
+build: $(EXTRA_TARGETS) $(EXEBASE)

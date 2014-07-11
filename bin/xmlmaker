@@ -1,0 +1,115 @@
+#!/usr/bin/ruby -w
+require File.expand_path(File.dirname(__FILE__)) + '/../lib/xmlmaker.rb'
+require 'rexml/document'
+include REXML
+
+tests = Array.new
+weights = Array.new
+opts = Array.new
+reps = Array.new
+vals = Array.new
+isgeom = true
+isbiggerbetter = false
+
+#test_descr.xml
+test_descr = Document.new(File.new("etc/test-descr.xml"))
+case XPath.first(test_descr, "//benchmark_description").attributes['summary_method']
+when "geomean"
+  weighted = false
+  isgeom = true
+  size = false
+when "weighted_geomean"
+  weighted = true
+  isgeom = true
+  size = false
+when "mean"
+  weighted = false
+  isgeom = false
+  size = false
+when "weighted_mean"
+  weighted = true
+  isgeom = false
+  size = false
+when "size"
+	size = true
+	weighted = false
+	isgeom = false
+end
+case XPath.first(test_descr, "//benchmark_description").attributes['greater_is_better']
+when "true"
+  isbiggerbetter = true
+when "false"
+  isbiggerbetter = false
+end
+
+#current benchmark run
+i = 0
+#one xml file contains one bench run results
+ARGV.each do |filename|
+  bench_run = Document.new(File.new(filename))
+  #extract options and repetitions
+  opts.push(XPath.first(bench_run, "/benchmark_run").attributes["compile_str"])
+  if !size then
+	 reps.push(XPath.first(bench_run, "/benchmark_run").attributes["repetitions"].to_i)
+  else
+	  reps.push(1)
+  end
+  #extract values
+  vals.push(Array.new)
+  j = 0 #current test
+  if !size then
+  XPath.each(bench_run, "//test") do |test|
+    if i == 0 then
+      #while parsing first benchmark run result
+      #we read all test info from test_descr.xml
+      name = test.attributes["name"]
+      tests.push(name)
+      weight = 0.0
+      if weighted then
+        weight = XPath.first(test_descr,"//test[@name='#{name}']").attributes["weight"].to_f 
+      else
+        weight = 1.0
+      end
+      weights.push(weight)
+      #just check tests are the same in non-first benchmark runs
+    elsif tests[j] != test.attributes["name"] then
+	raise "Test order is not the same!"
+    end
+    vals[i][j] = Array.new
+    testerror = false
+    status = test.attributes["status"]
+    if (status && status.casecmp("ok") != 0) 
+      testerror = true
+    end
+    XPath.each(test, "run") do |run|
+      status = run.attributes["status"]
+      if (testerror || (status && status.casecmp("ok") != 0)) 
+        vals[i][j].push("error")
+      else 
+        vals[i][j].push(run.attributes["value"])
+      end
+    end
+    j += 1
+  end
+  else
+	  #result by size
+	  status = XPath.first(bench_run, "/benchmark_run").attributes["result"]
+	  value = XPath.first(bench_run, "/benchmark_run").attributes["score"].to_f
+	  vals[i][0] = Array.new
+  	  if (status && status.casecmp("ok") != 0)
+	  	vals[i][0].push("error")
+  	  else
+		vals[i][0].push(value)
+	  end
+  end
+  i += 1
+end
+if size then
+	tests.push("size")
+	weights.push(1.0)
+end
+#$stdout = File.open('results.xml', 'w')
+if i == 0 then
+  raise "No input files"
+end
+makexml(tests, weights, isgeom, isbiggerbetter, opts, opts, reps, vals)

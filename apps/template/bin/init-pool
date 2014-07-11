@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# init-pool
+# POOL_DIR - path to pool
+# FLAGS - a list of flags
+
+# This script should configure and build an application in a pool
+

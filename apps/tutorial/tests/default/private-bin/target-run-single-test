@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# target-run-single-test > single-test-results
+# POOL_DIR - path to pool
+
+# This script should run the test using the executables from $POOL_DIR/run
+
+echo "This is tutorial run"
+
+# It's very simple application, so print here one common hash value for each test run.
+#echo "HASH=123"
+
+$POOL_DIR/run/tutorial

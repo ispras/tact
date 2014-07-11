@@ -1,0 +1,11 @@
+#!/bin/sh
+if [ -e $TEST_DIR/private-etc/build-config ]; then
+	. $TEST_DIR/private-etc/build-config
+fi
+
+if [ -e $APP_DIR/private-etc/build-config ]; then
+	. $APP_DIR/private-etc/build-config
+fi
+
+echo `md5sum $CC` "(" `$CC --version | head -n 1` ")"
+

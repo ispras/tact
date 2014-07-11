@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# rebuild-pool
+# POOL_DIR - path to pool
+# FLAGS - a list of flags
+
+# This script should rebuild those parts of code that are
+# important for this test

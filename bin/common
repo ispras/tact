@@ -1,0 +1,8 @@
+wd=`pwd`
+export APP_DIR=`expr $wd : '\(^.*/apps/[^/]*\)'`
+export TEST_DIR=`expr $wd : '\(^.*/tests/[^/]*\)'`
+
+if [ "x$APP_DIR" == "x" -o "x$TEST_DIR" == "x" ]; then
+  echo "This script should be run within specific test directory, i.e. /home/user/tact/apps/APP_NAME/tests/TEST_NAME"
+  exit 2
+fi

@@ -1,0 +1,7 @@
+#!/bin/sh
+
+# compute-binary-hash
+# POOL_DIR - path to pool
+
+# This script should print out a single binary hash for test binaries, e.g. md5sum of .so file of the library
+# under optimization

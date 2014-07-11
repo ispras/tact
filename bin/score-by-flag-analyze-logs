@@ -1,0 +1,145 @@
+#!/usr/bin/ruby
+
+require 'rexml/document'
+require 'set'
+require 'optparse'
+require File.expand_path(File.dirname(__FILE__)) + '/../lib/ConfParser.rb'
+require File.expand_path(File.dirname(__FILE__)) + '/../lib/FlagsParser.rb'
+include REXML
+include Math
+
+def print_brief_summary(desc, opts)
+  count = 0
+  opts[:flags].map {|k, v| count += (v!="") ? 1 : 0 }
+  printf "%s (%d): ", desc, count
+  puts flags_to_string(opts[:flags])
+  puts "Score: " + opts[:score].to_s
+  puts
+end
+
+# Returns how much better is VAL relative to TO_BASE
+def get_percentage(val, to_base)
+  return (1.0 - val[:score] / to_base[:score])*100 * (@greater_is_better ? -1.0 : 1.0)
+end
+
+def score_worse?(a, b)
+  return @greater_is_better? a < b : a > b
+end
+
+def score_better?(a, b)
+  return @greater_is_better? a > b : a < b
+end
+
+def score_compare(a, b)
+  return @greater_is_better? a <=> b : b <=> a
+end
+
+@greater_is_better = ConfParser.new.runtime_params[:greater_is_better]
+
+f = File.new(ARGV[0], "r")
+
+samp = Array.new
+prev = nil
+line_num = 0
+best = nil
+first = nil
+checks = Array.new
+best_checks = nil
+
+while (l = f.gets)
+  line_num += 1
+  if (checks && l.match(/^CHECKING\s+(.+)/))
+    flags = $1
+    checks.push({ :flags => Hash[parse_flags(flags)] })
+  elsif (checks && l.match(/^SCORE:\s+([\d\.\d]+)/))
+    checks[-1][:score] = $1.to_f
+  elsif (l.match(/^WIN SCORE: ([\d\.\d]+)\s+BINARY_SIZE:\s+[\d\.\d]+\s+(.+)/))
+    score = $1
+    flags = $2
+    arr = parse_flags(flags)
+
+    ha = {:flags => Hash[arr], :arr => arr, :score => score.to_f, :fail => false, :line_num => line_num}
+
+    if prev
+      # If all new options are only in the previous string, then ok
+      diff_opts = diff(prev, ha)
+      diff_opts_arr = Array.new
+      diff_opts.each do |opt|
+        diff_opts_arr.push(prev[:flags][opt])
+        if ha[:flags][opt] != ""
+	  puts "ERROR: line #{line_num} adds some options to previous configuration."
+	  puts "Probably you should split the log somewhere before this line."
+	  exit 2
+        end
+      end
+      prev[:diff_str] = diff_opts_arr.join(" ")
+#    else
+#      ha[:diff_str] = flags_to_string(ha[:flags])
+    end
+
+    if !best || !score_worse?(ha[:score], best[:score])
+      best = ha 
+      checks = Array.new
+    end
+
+    if checks && score_worse?(ha[:score], best[:score])
+      best_checks = checks
+      checks = nil
+    end
+
+    samp.push(ha)
+    first = ha unless first
+    prev = ha
+  end
+end
+
+#p best_checks.length
+
+base = prev
+print_brief_summary("Original options", first)
+print_brief_summary("Reducing to", base)
+print_brief_summary("Best", best)
+
+# Print header
+puts " Score\t%Prev\t%Base\t%Best\tFlags diff"
+
+first = true
+samp.reverse_each do |x|
+
+  if first
+    diff_str = flags_to_string(x[:flags])
+    perc = 0.0
+    first = false
+    p_prev = 0
+    p_base = 0
+    p_best = get_percentage(x, best)
+  else
+    diff_str = x[:diff_str]
+
+    p_prev = get_percentage(x, prev)
+    p_base = get_percentage(x, base)
+    p_best = get_percentage(x, best)
+  end
+  mark = (x[:line_num]==best[:line_num]?'*':' ')
+  printf "%s%.3f\t%5.2f%%\t%5.2f%%\t%5.2f%%\t%s\n", mark, x[:score], p_prev, p_base, p_best, diff_str
+
+  prev = x
+end
+
+puts
+puts "Relative score of excluding single option from best:"
+puts
+
+puts " Score\t%Best\tFlags diff"
+best_checks.sort{ |a, b| score_compare(a[:score], b[:score]) }.each do |x|
+  d = diff(x, best)
+  # Filter lines that are not different from best just in one flag
+  next if d.length > 1
+  opt = d.map { |s| s }[0]
+  next if x[:flags][opt] != "" || best[:flags][opt] == ""
+
+  printf "%5.3f\t%5.3f\t", x[:score], get_percentage(x, best)
+  d = diff(x, best)
+  d.map { |o| printf best[:flags][o]+" " }
+  puts
+end

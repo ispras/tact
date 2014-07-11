@@ -1,0 +1,26 @@
+#!/bin/bash
+
+cd $1
+
+BASELINES=`get_conf_value --param baselinesnum --xml $TEST_DIR/etc/tuning.conf`
+BOARD_ID=`get_conf_value --param board_id --xml $TEST_DIR/etc/tuning.conf`
+#    *** start gnuplot ***
+echo "start-gnuplot for baselines: $BASELINES"
+echo '#!/usr/bin/gnuplot -persist
+
+set terminal jpeg
+set terminal postscript solid color eps enhanced
+set output "result.pdf"
+set xlabel "Performance (points)"
+set ylabel "Size (bytes)"
+set size ratio -1
+set xtics 2
+plot "archive.log" using 1:2 title "flags" with points, \
+     "pareto.log" using 2:3 title "pareto" with linespoints, \
+     "pareto-best.log" using 2:3 title "best-pareto" with points, \
+     for [i=1:'"$BASELINES"'] "'"$TEST_DIR/log/current/ref/$BOARD_ID"'-".i.".dat" using 1:2 title column with points' > file.gnu
+     
+cat file.gnu | gnuplot
+
+cat result.pdf | ps2pdf - output.pdf
+

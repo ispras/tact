@@ -1,0 +1,220 @@
+#!/usr/bin/ruby
+
+if !ARGV[0] #|| !ARGV[1]
+  puts "Usage: #{$0} GCC_BASE_DIR" # CONFIG_PREFIX"
+  puts "\tGCC_BASE_DIR - path to gcc source tree, where gcc/common.opt can be found."  
+#  puts "\tCONFIG_PREFIX - a prefix to append to config files generated, e.g. for gcc440 files named like gcc440-options-original.txt will be generated."
+  exit 1
+end
+
+gcc_base = ARGV[0]
+config_prefix = ARGV[1]
+config_prefix = "" if config_prefix == nil
+
+common_opt = File.new(gcc_base+'/gcc/common.opt', "r")
+state = 1
+
+options = Hash.new
+options_by_varname = Hash.new
+ignore_options = Hash.new
+
+File.new(File.expand_path(File.dirname(__FILE__)) + '/../etc/extract-gcc-options-ignore.txt', "r").readlines.each do |str|
+  str.chomp!
+  next if str == '' || str.match(/[ \t]*\#/)
+#  puts str
+  ignore_options[str] = str
+end
+
+#puts ignore_options.has_key?("fPIC")
+#exit 0
+
+option = nil
+var_name = nil
+init_val = nil
+
+common_opt.readlines.each do |str|
+  str.chomp!
+#  puts "#{str}"
+##  puts "#{state} == #{str}"
+#  puts "++#{state} == #{str}"
+  if str == '' || str.match(/^;.*/)
+    state = 1
+
+#    puts "X"
+#   puts "#{state} == #{str}"
+#   puts "++#{state} == #{str}"
+
+    # Save the option we've found previously (if any)
+    if option 
+      if !ignore_options.has_key?(option)
+        options[option] = {
+	  :option_name => option,
+	  :var_name => var_name,
+	  :init_val => init_val
+        }
+        if var_name
+          options_by_varname[var_name] = option
+        end
+      end
+      
+      option = nil
+      var_name = nil
+      init_val = nil
+    end
+    next
+  end
+
+  if state == 1 
+    if str.match(/^f.*$/)
+      option = str
+      state = 2
+    else
+      state = 0
+    end
+  elsif state == 2
+    m = str.match(/Var\(([^,) ]+)(,([^)])+)?\)/)
+    if m
+	var_name = m[1]
+#	if m[3]
+#	    init_val = m[3]
+#	end
+    end    
+    m = str.match(/Init\(([^) ]+)\)/)
+    if m
+#	if init_val
+#	    warn "Duplicate initialization for #{option}"
+#	    exit 1
+#	else
+	    init_val = m[1]
+#	end
+    end
+    
+    state = 0
+#    puts "#{option}\t#{var_name}\t#{init_val}"
+  end
+end
+
+common_opt.close
+
+conf = File.new(config_prefix + "tuning.conf", "w")
+
+conf.puts "<?xml version=\"1.0\"?>"
+conf.puts "<config>"
+conf.puts \
+'    <prime command=""
+           flags="-O2" />
+
+    <baseline description="-O1"
+              command=""
+              flags="-O1" />
+
+    <baseline description="-O2"
+              command=""
+              flags="-O2" />
+
+    <baseline description="-O3"
+              command=""
+              flags="-O3" />
+
+    <baseline description="-Os"
+              command=""
+              flags="-Os" />'
+
+File.new(gcc_base+'/gcc/opts.c').readlines.each do |str|
+  if str.match(/^\s*([^\s]+)\s*=\s*([^\s;]+)\s*;/)  
+    if options_by_varname.has_key?($1)
+      var = $1
+      val = $2
+      opt_level = '?'
+      if val.match(/^opt(\d)(_max)?$/)
+        if $2
+          opt_level = "<=O"
+        else
+          opt_level = "O"
+        end
+        opt_level += $1
+#        puts "#{var} #{opt_level}"
+      end
+#      puts "option: " + options_by_varname[var]
+#      puts "\tprev value: " + (options[options_by_varname[var]][:opt_level] ? options[options_by_varname[var]][:opt_level] : "nil")
+#      puts "\tnew value: #{opt_level} (#{val})"
+
+      # Only upgrade the value in the following order: nil -> ? -> Ox
+      if opt_level != '?' || options[options_by_varname[var]][:opt_level] == nil
+        options[options_by_varname[var]][:opt_level] = opt_level
+      end
+    end
+  end
+end
+
+conf.puts "\n\t<flags>"
+
+(options.values.sort { |a, b| a[:option_name] <=> b[:option_name] }).each do |opt|
+  if !opt[:opt_level]
+    opt[:opt_level] = '-'
+  end
+  if !opt[:var_name]
+    opt[:var_name] = '-'
+  end
+  opt[:init_val] || opt[:init_val] = '-'
+  conf.printf("<!-- %-35s %4s  %-40s %5s -->\n", opt[:option_name], opt[:opt_level], opt[:var_name], opt[:init_val])
+  if opt[:option_name][-1] == ?- || opt[:option_name][-1] == ?=
+    conf.puts "<!-- CANNOT TRANSFORM THIS OPTION AUTOMATICALLY! -->"
+  else
+    conf.puts "<flag type='gcc_flag' value='-#{opt[:option_name]}'/>"
+  end
+end
+
+state = 1
+param_name = ''
+params = Hash.new
+# Params
+File.new(gcc_base+'/gcc/params.def', "r").each do |str|
+#  puts "#{state} == #{str}"
+
+  str.chomp!
+#  if str == ''
+#    state = 1
+#    next
+#  end
+   
+  if state == 1 
+    if str.match(/^DEFPARAM/)
+      if !(str.match(/,\s*$/))
+        puts "Achtung!"
+        puts str
+        exit -1
+      end
+      state = 2
+    end
+  elsif state == 2
+    str.match(/^\s*"(.+)",\s*$/)
+    param_name = $1
+    state = 3
+  elsif state == 3
+    # skip comments
+    if str.match(/,\s*$/)
+      state = 4
+    end
+  elsif state == 4
+    # parse range
+#    puts str
+    str.match(/^\s*([^,]+),\s*([^,]+),\s*([^\)]+)\s*\)/)
+    params[param_name] = {
+	:param_name => param_name,
+	:default_value => $1,
+	:min => $2,
+	:max => $3
+    }
+    state = 1
+  end
+end
+
+(params.values.sort { |a, b| a[:param_name] <=> b[:param_name] }).each do |opt|
+  conf.printf("<!-- %-40s %-4s  %-4s %-4s -->\n", opt[:param_name], opt[:default_value], opt[:min], opt[:max])
+  conf.puts "<flag type='param' value='--param #{opt[:param_name]}' default='#{opt[:default_value]}' min='#{opt[:min]}' max='#{opt[:max]}' separator='='/>"
+end
+
+conf.puts "\t</flags>"
+conf.puts '</config>'
+conf.close

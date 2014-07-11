@@ -1,0 +1,6 @@
+#!/bin/sh
+
+# init-shared
+# This script should configure and build shared libraries
+# Shared libraries should be built in $TEST_DIR/shared
+

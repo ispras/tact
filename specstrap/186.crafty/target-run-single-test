@@ -1,0 +1,9 @@
+#!/bin/bash
+echo "TEST=spec"
+oldpwd=`pwd`
+cd $POOL_DIR/run/
+time -p $POOL_DIR/run/app_* < crafty.in > $POOL_DIR/run/crafty.out
+code=$?
+cd $oldpwd
+echo "HASH="`md5sum $POOL_DIR/run/crafty.out | awk '{ print $1 }'`
+exit $code

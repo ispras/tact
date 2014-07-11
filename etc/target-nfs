@@ -1,0 +1,24 @@
+# Add here appropriate commands to remount NFS volume based either on `uname` result
+# or $TESTBOARD_NUM numeric value.
+# Also this script can be modified to look in $TEST_DIR or $APP_DIR for more specific
+# parameters.
+
+nfs_remount() {
+  DIR="/mnt/condor"
+  SERVER="192.168.0.1"
+
+  if uname -a | grep beagle-angstrom >/dev/null; then
+    su -c - root "mount -o remount $DIR"
+  elif uname -a | grep "localhost 2.6.29.4 #2 Fri Mar 12 15:42:20 MSK 2010" >/dev/null; then
+    # C110
+    su -c - root "mount $SERVER:/home $DIR -o tcp,nolock,remount"
+  elif uname -m | grep x86 >/dev/null; then
+    echo -n "" #remount non needed (tutorial)
+  elif uname -a | grep "aquila" >/dev/null; then
+    # small C110
+    echo -n "" #remount temporarily disabled
+#  else
+#    # Debian
+#   sudo mount $DIR
+  fi
+}

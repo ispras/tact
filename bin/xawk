@@ -1,0 +1,17 @@
+#!/usr/bin/ruby
+
+require 'optparse'
+require 'rexml/document'
+include REXML
+
+if ARGV.length < 2
+  puts "Usage: #{$0} FILE XPATH_EXPR"
+  puts "\te.g. #{$0} file.xml \"/tag/@attr\" for file content <tag attr='123'/> will output 123"
+  exit 1
+end
+
+doc = Document.new(File.new(ARGV[0]))
+value = XPath.first(doc, ARGV[1]) 
+#.attributes["score"].to_f
+
+puts value

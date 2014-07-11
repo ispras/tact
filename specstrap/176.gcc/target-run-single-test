@@ -1,0 +1,10 @@
+#!/bin/bash
+echo "TEST=spec"
+cd $POOL_DIR/run/
+time -p $POOL_DIR/run/app_* cp-decl.i -o res
+ret=$?
+cd $TEST_DIR
+MDHASH=`md5sum $POOL_DIR/run/res | awk '{ print $1 }'`
+echo "HASH=$MDHASH"
+rm $POOL_DIR/run/res
+exit $ret

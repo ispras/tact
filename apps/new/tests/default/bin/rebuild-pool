@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# rebuild-pool
+# POOL_DIR - path to pool
+# FLAGS - a list of flags
+
+# directory with private configs
+CONFIG_DIR="$TEST_DIR/private-etc"
+
+# remove binary
+rm $POOL_DIR/run/new
+
+# build new binary with given $FLAGS
+#echo $CC $FLAGS $TEST_DIR/src/new/new.c -lm -o $POOL_DIR/run/new
+$TEST_DIR/src/new.sh $FLAGS > $POOL_DIR/run/new
+#$CC $TEST_DIR/src/new/new.c -lm -o $POOL_DIR/run/new

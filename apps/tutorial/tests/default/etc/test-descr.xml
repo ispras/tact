@@ -1,0 +1,5 @@
+<benchmark_description
+    summary_method="mean"
+    greater_is_better="true">
+    <test name="tutorial" weight="1"/>
+</benchmark_description>

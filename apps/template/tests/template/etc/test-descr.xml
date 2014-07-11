@@ -1,0 +1,8 @@
+<benchmark_description
+	summary_method="weighted_geomean">
+	
+	<!-- summary_method can be mean, geomean, weighted_mean and weighted_geomean -->
+	
+	<test name="test1" weight="1.0"/>
+	<test name="test2" weight="2.0"/>
+</benchmark_description>

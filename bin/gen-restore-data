@@ -1,0 +1,38 @@
+#!/usr/bin/ruby
+
+require 'optparse'
+require 'rexml/document'
+include REXML
+include Math
+
+folder = ARGV[0].to_s
+generation = ARGV[1].to_s
+entities = ARGV[2].to_f
+puts("GENERATION="+generation)
+puts("RERUN=0")
+#extract all scores
+contains = Dir.new(folder).entries
+mask = "res-[0]*"+generation+"-[0-9][0-9]-[0-9][0-9][0-9]\.xml"
+restored = 1
+contains.each do |filename|
+	if filename == filename[/#{mask}/]
+		bench_run = Document.new(File.new(folder+"/"+filename))
+		tmp = XPath.first(bench_run, "/benchmark_run").attributes["compile_str"]
+		tmp1 = XPath.first(bench_run, "/benchmark_run").attributes["score"]
+		if (tmp != nil)
+			if (tmp1 != nil)
+				#write here it to file
+				puts(tmp1+"\t"+tmp)
+			else
+				puts("1000000000\t"+tmp)
+			end
+		else
+			puts("1000000000\t")
+		end
+		restored = restored + 1
+	end
+end
+
+for i in (restored..entities)
+	  puts("1000000000\t")
+end

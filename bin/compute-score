@@ -1,0 +1,92 @@
+#!/usr/bin/ruby
+
+require 'rexml/document'
+require 'optparse'
+include REXML
+include Math
+
+if ARGV.length < 1
+  puts "Usage: compute-score RESULTS_XML_FILE"
+  exit 2
+end
+
+test_descr = Document.new(File.new(ENV['TEST_DIR'] + "/etc/test-descr.xml"))
+results = Document.new(File.new(ARGV[0]))
+save_score = true
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: $0 [options]"
+  opts.on("--[no-]save", "Save computed score back into XML results file") do |val|
+    save_score = val
+  end
+end.parse!(ARGV[1..(ARGV.length-1)]) 
+
+begin
+  if !XPath.first(results, "//benchmark_run").attributes['result'].match(/^ok/i)
+    throw :not_ok
+  end
+rescue
+  puts "0.0"
+  exit 2
+end
+
+case XPath.first(test_descr, "//benchmark_description").attributes['summary_method']
+when "geomean"
+  function = Math.method(:log)
+  unfunction = Math.method(:exp)
+  weighted = false
+when "weighted_geomean"
+  function = Math.method(:log)
+  unfunction = Math.method(:exp)
+  weighted = true
+when "mean"
+  function = lambda {|x| x}
+  unfunction = lambda {|x| x}
+  weighted = false
+when "weighted_mean"
+  function = lambda {|x| x}
+  unfunction = lambda {|x| x}
+  weighted = true
+end
+
+def merge_runs(values)
+  values.sort!
+  if values.length % 2 == 1
+    return values[values.length / 2]
+  else
+    return (values[values.length / 2] + values[values.length / 2 - 1]) / 2
+  end
+end
+
+tests = Hash.new
+
+sum = 0.0
+total_weight = 0.0
+
+
+XPath.each(results, "//test") do |t|
+  name = t.attributes['name']
+  if weighted
+    weight = XPath.first(test_descr, "//test[@name='#{name}']").attributes['weight'].to_f
+  else
+    weight = 1.0
+  end
+
+  if weight != 0
+    sum += weight * 
+      function.call( merge_runs( XPath.match(t, "run").map{|r| r.attributes['value'].to_f} ) )
+  end
+  total_weight += weight
+end
+
+score = unfunction.call(sum/total_weight)
+score = sprintf("%.6f",score).to_f
+puts score
+
+if save_score
+  XPath.first(results, "//benchmark_run").attributes['score'] = score
+  out = File.new(ARGV[0], "w")
+  results.write(out, 2)
+  out.puts
+end
+

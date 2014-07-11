@@ -1,0 +1,142 @@
+#!/usr/bin/ruby
+
+require 'optparse'
+require 'rexml/document'
+include REXML
+
+if ! Dir.exist?("#{File.dirname(__FILE__)}/boards")
+  Dir.mkdir("#{File.dirname(__FILE__)}/boards")
+end
+config_file = File.dirname(__FILE__) + "/system.xml"
+system = Document.new(File.new(config_file)) 
+$tact_username = XPath.first(system, "//tact_username").attributes['value']
+$board_os = nil
+def boards_path_from_xml(system)
+  main_server_id = XPath.first(system, "//main_server").attributes['id']
+  main_server_network_name = XPath.first(system, "//main_server").attributes['network_name']
+
+  boards = Array.new
+
+  board_num = 0
+  XPath.each(system, "//board") do |board|
+    
+    boards[board_num] = Hash.new
+
+    board_id = board.attributes['id']
+    board_network_name = board.attributes['network_name']
+    board_from = board.attributes['connected_from']
+    board_os = board.attributes['os']
+    boards[board_num][board_id] = []
+
+    boards[board_num][board_id].push(board_network_name)  
+
+    board_file = File.dirname(__FILE__) + "/boards/#{board_id}"
+    if ! File.exist?(board_file)
+      file = File.new(board_file, "w")
+      file.print("free")
+      file.close 
+    end
+
+    current_from = board_from
+    while !(current_from == main_server_id )
+      XPath.each(system, "//inter_server") do |inter|
+      
+        inter_id = inter.attributes['id']
+        inter_network_name = inter.attributes['network_name']
+        inter_from = inter.attributes['connected_from']
+
+        if current_from == inter_id 
+          current_from = inter_from
+          boards[board_num][board_id].push(inter_network_name)
+          break
+        end
+      end
+    end
+
+    boards[board_num][board_id].push(main_server_network_name) 
+    boards[board_num][board_id].push(board_os) 
+    board_num +=1
+  end
+
+  return boards
+end
+
+boards = boards_path_from_xml(system)
+board_id = nil
+command = nil
+board_class = []
+OptionParser.new do |opts|
+  opts.banner = "Usage: $0 [options]"
+
+  opts.on("--board_class PARAMETER", "Get PARAMETER of board_class") do |boards_string|
+    board_class = boards_string.split
+  end
+
+  opts.on("--board_id PARAMETER", "Get PARAMETER of board_id") do |id|
+    board_id = id
+  end
+
+  opts.on("--command PARAMETER", "GET command PARAMETR for execution") do |cmd|
+    command = cmd
+  end
+
+end.parse!(ARGV)
+
+if board_class != []
+  used = true
+  while used
+    board_class.each{ |board|
+      board_file = File.new("boards/#{board}", "r")
+      status = board_file.gets.to_s
+      if status == "free"
+        board_id = board
+        used = false
+      end
+    }
+  end
+end
+puts board_id
+
+if board_id == "localhost"
+  cmd_string = "/bin/bash -c '#{command}'"
+else
+  board_path = []
+  boards.each { |board|
+    if board.key?(board_id)
+      board_path = board[board_id].reverse!
+    end 
+  }
+  board_os = board_path[0]
+
+  board_path = board_path[2..-1]
+  cmd_string = ""
+  board_path.each { |machine|
+    puts "I'm #{board_os} "
+    if board_os == "tizen"
+      cmd_string += "ssh -At #{$tact_username}@#{machine} "
+    else
+      cmd_string += "ssh -A #{$tact_username}@#{machine} "
+    end
+  }
+
+  cmd_string += "'#{command} '"
+end
+puts cmd_string
+stat_file = File.dirname(__FILE__) + "/boards/#{board_id}_stat"
+File.open(stat_file, "a+"){ |f| f.puts(command)}
+#execute on the remote board
+target_file = File.dirname(__FILE__) + "/boards/#{board_id}"
+lock_file = File.new(target_file, "w+")
+lock_file.flock(File::LOCK_EX)
+
+text=''
+File.open(stat_file,"r"){|f|f.gets;text=f.read}
+File.open(stat_file,"w"){|f| f.write(text)}
+
+puts cmd_string
+system(cmd_string)
+
+lock_file.print("free")  
+lock_file.flock(File::LOCK_UN)
+lock_file.close
+

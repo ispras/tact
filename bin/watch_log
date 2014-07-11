@@ -1,0 +1,2 @@
+clear
+tail -f log/progress.log
