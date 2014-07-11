@@ -1,0 +1,10 @@
+#!/bin/bash
+echo "TEST=spec"
+oldpwd=`pwd`
+cd $POOL_DIR/run/
+time -p $POOL_DIR/run/app_*  -l ./ -q -m 64M < train.in > test.out
+code=$?
+cd $oldpwd
+echo "HASH=`md5sum $POOL_DIR/run/test.out | awk '{ print $1 }'`"
+exit $code
+~         

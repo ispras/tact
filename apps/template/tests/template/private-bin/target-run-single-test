@@ -1,0 +1,21 @@
+#!/bin/sh
+
+# target-run-single-test > single-test-results
+# POOL_DIR - path to pool
+# TEST_NAME - name of the test
+
+# This script should run the test $TEST_NAME using the executables from $POOL_DIR/run
+
+echo "TEST=$TEST_NAME"
+
+case "$TEST_NAME" in
+	test1)	
+		{ time ls /usr/bin > $POOL_DIR/log/single-log; echo "EXIT_CODE=$?"; } 2>&1
+		;;
+	test2)
+		{ time ls /bin/ > $POOL_DIR/log/single-log; echo "EXIT_CODE=$?"; } 2>&1
+		;;
+esac
+
+echo "HASH1=`md5sum $POOL_DIR/log/single-log | awk '{print $1}'`"
+#echo "HASH2=`md5sum /path/to/data/base | awk '{print $1}'`"

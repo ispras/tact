@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# target-run-single-test > single-test-results
+# POOL_DIR - path to pool
+# TEST_NAME - name of the test
+
+# This script should run the test $TEST_NAME using the executables from $POOL_DIR/run
+
+echo "TEST=test"
+du -b $POOL_DIR/a.out | awk '{ print "SCORE=" $1 }'

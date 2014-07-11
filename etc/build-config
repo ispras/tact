@@ -1,0 +1,3 @@
+# The list of variables exported from this file includes:
+
+MAKE_FLAGS="-j9"

@@ -1,0 +1,111 @@
+#!/usr/bin/ruby
+
+require 'rexml/document'
+require 'set'
+require 'narray'
+require File.expand_path(File.dirname(__FILE__)) + '/../lib/common.rb'
+include REXML
+include Math
+
+####################################################################################################
+
+@all_flags = Set.new
+@flags_values = Hash.new
+
+def normalize(flag)
+  r = \
+  case flag
+  when /^(.+)=(.*)$/
+    $1
+  when /^-fno-(.+)$/
+    "-f" + $1
+  when /^-mno-(.+)$/
+    "-m" + $1
+  when /^-DNO_(.+)$/
+    "-D" + $1
+  when /^(-f.+)$/
+    $1
+  when /^(-m.+)$/
+    $1
+  when /^(-D.+)$/
+    $1
+  when /^(.+)$/
+    $1
+  end
+  @all_flags.add(r)
+  @flags_values[r] = [] if not @flags_values.has_key?(r)
+  @flags_values[r].push(flag) if @flags_values[r].index(flag) == nil
+  return r
+end
+
+def parse_flags(compile_str)
+  if compile_str.match(/(\s*(--param\s+\S+|\S+)\s*)*/)
+    return Hash[compile_str.scan(/\s*(--param\s+\S+|\S+)\s*/).map {|f| [normalize(f[0]), f[0]]}]
+  else
+    $stderr.puts "Wrong compile string! ignored"
+  end
+end
+
+init_samples = ARGV.map {|a|
+  begin 
+    XPath.match(Document.new(File.new(a)), "//benchmark_run").map {|r| \
+      {:flags => parse_flags(r.attributes['compile_str']), :score => r.attributes['score']} \
+    } 
+  rescue
+    []
+  end
+}.flatten
+
+init_samples.each {|s| s[:score] = 0.0 if s[:score].to_f >= 10000}
+
+$stderr.puts "pairs constructed"
+$stderr.flush
+
+matrix_original_1 = NMatrix.to_na(init_samples.map {|s| @all_flags.to_a.map {|f|
+                                      @flags_values[f].map {|v|
+                                        s[:flags][f] == v ? 1.0 : 0.0
+                                      }
+                                    }.flatten(1)})
+
+$stderr.puts "matrix constructed"
+$stderr.flush
+
+rhs_original_1 = NVector.to_na(init_samples.map {|s| s[:score].to_f})
+
+matrix_original = matrix_original_1 #[true, 0..rhs_original_1.total/2]
+rhs_original = rhs_original_1 #[0..rhs_original_1.total/2]
+
+matrix = matrix_original
+rhs = matrix.transpose * rhs_original
+matrix = matrix.transpose * matrix_original
+
+diag = matrix.clone.fill(0.0).diagonal(0.01)
+matrix = matrix + diag
+
+lhs = rhs / matrix
+
+score = 0
+n = 0
+@all_flags.to_a.each do |f|
+  best_sc = nil
+  best_val = nil
+  for i in (0..@flags_values[f].size - 1)
+    if best_sc.nil? or lhs[n] > best_sc
+      best_sc = lhs[n]
+      best_val = @flags_values[f][i]
+    end
+    n += 1
+  end
+
+  score += best_sc
+  print "#{best_val} "
+end
+
+puts
+puts score
+
+#newscores = matrix_original_1 * lhs
+#
+#(0..newscores.total-1).each do |i|
+#  puts "#{(rhs_original_1[i] - newscores[i]).abs}  \t#{rhs_original_1[i]}  ->\t#{newscores[i]}"
+#end

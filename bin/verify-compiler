@@ -1,0 +1,13 @@
+#!/usr/bin/ruby
+require 'rexml/document'
+include REXML
+
+results = Document.new(File.new(ARGV[0]))
+benchmark_run = XPath.first(results, "//benchmark_run")
+reference = Document.new(File.new(ARGV[1]))
+reference_run = XPath.first(reference, "//benchmark_run")
+
+if benchmark_run.attributes['compiler'] != reference_run.attributes['compiler']
+	exit(2)
+end
+

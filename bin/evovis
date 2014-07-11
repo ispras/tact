@@ -1,0 +1,513 @@
+#!/usr/bin/perl
+
+use strict;
+use Getopt::Long;
+use Chart::Gnuplot;
+use Pod::Usage;
+
+my $help;
+my $output;
+my $input;
+my $config = "$ENV{'TACT_DIR'}/etc/evovis.conf";
+my $percent;
+my $noyscale;
+my $noxscale;
+my $nocscale;
+my $cbest;
+my $clocal;
+my $cplacelocal;
+my $cmaxscale;
+my $format = "png";
+my $onegen;
+my $onepop;
+my $nounused;
+my $termsize;
+my $gamma = 1;
+my $font;
+my $ticfont;
+my $experimental;
+my $red;
+my $alltics;
+my $verbose;
+my $latex;
+my $noimg;
+
+use vars qw(@populations @patterns @popsize %flagtics %flagnums
+	    $minscore $totalscore $totalsize @popscore @localminscore
+	    @popsizeever @popscoreever @localminscoreever);
+
+$totalsize = 0;
+$totalscore = 0;
+$minscore = 1000;
+
+GetOptions(
+	'help|h' => \$help,
+	'o=s' => \$output,
+	'c=s' => \$config,
+	'percent' => \$percent,
+	'noyscale' => \$noyscale,
+	'noxscale' => \$noxscale,
+	'nocscale' => \$nocscale,
+	'cbest' => \$cbest,
+	'clocal' => \$clocal,
+	'cplacelocal' => \$cplacelocal,
+	'cmaxscale' => \$cmaxscale,
+	'onegen' => \$onegen,
+	'onepop' => \$onepop,
+	'nounused' => \$nounused,
+	'format=s' => \$format,
+	'size=s' => \$termsize,
+	'gamma=s' => \$gamma,
+	'ticfont=s' => \$ticfont,
+	'font=s' => \$font,
+	'experimental' => \$experimental,
+	'red' => \$red,
+	'alltics' => \$alltics,
+	'verbose|v' => \$verbose,
+	'latex' => \$latex,
+	'noimg' => \$noimg
+	);
+
+pod2usage(1) if $help;
+
+$config or die "Error: config file not specified";
+open CONF, "< $config" or die "Error opening config file ($config): $!";
+chomp(@patterns = <CONF>);
+
+$input = shift(@ARGV);
+
+scalar(@ARGV) > 0 && die "Error: multiple input files";
+
+if( $input ) {
+	open STDIN, "<$input" or die $!;
+} else {
+        die "Error: no input files specified";
+}
+
+
+while( <STDIN> ) {
+	if( /\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+'(.+)'\s*/ ) {
+		my $g = $3;
+		my $p = $4;
+
+		$g = 1 if $onegen;
+		$p = 0 if $onepop;
+
+		$populations[$g] = [] unless $populations[$g];
+
+		my $generation = $populations[$g];
+		
+		$generation->[$p] = {} unless $generation->[$p];	
+		
+		add_individual($g, $p, $generation->[$p], $2, $5);
+	}
+}
+
+if( !$noimg ) {
+for my $g (1 .. $#populations) {
+	for my $p (0 .. $#{$populations[$g]}) {	
+		while( my ($flag,$alleles) =  each(%{$populations[$g]->[$p]}) ) {
+			
+			my (@x, @y, @t, @c, @ex, @ey, @ec);
+
+			my $realalleles = $noxscale ? $flagtics{$flag} : $alleles;
+
+			for my $allele (sort {$a <=> $b} keys(%$realalleles)) {
+				if(($allele * 1) eq $allele && !$nounused) {
+					push(@x, $allele);
+					push(@t, $allele) if $alltics;
+				} else {
+					# doesn't support mixing numbers and non-nums
+					push(@x, $#x + 1);
+					if( $alltics || $#x != $allele || @t) {
+						push(@t, "\"$allele\" $#x");
+					}
+				}
+
+				push(@y, 0), push(@c, 0), next unless $alleles->{$allele};
+
+				if($percent) {
+					push(@y, $alleles->{$allele}->{count} * 100 / 
+						  $popsize[$g][$p]);
+				} else {
+					push(@y, $alleles->{$allele}->{count});
+				}
+				
+				if($experimental) {
+					my $n = 0;
+					for my $score (sort {$b <=> $a} @{$alleles->{$allele}->{all}}) {
+						my $col = calc_color($g, $p, $score);
+						push(@ex, $x[$#x]);
+						push(@ey, $n / $popsize[$g][$p]);
+						push(@ec, gencolor($col));
+						++$n;
+					}
+				} else {
+				 	my $score = $cbest 
+					? $alleles->{$allele}->{minscore}
+					: $alleles->{$allele}->{score} / $alleles->{$allele}->{count};
+
+					my $col = calc_color($g, $p, $score);
+
+					push(@c, gencolor($col));
+				}
+			}
+
+			my $flagnumber = $flagnums{$flag};
+
+			print "generating $output-$g-$p-$flagnumber.$format\n";
+
+			my $chart = Chart::Gnuplot->new(
+				output => "$output-$g-$p-$flagnumber.$format",
+				title  => "$flag $g $p",
+				font => "'$font'",
+				#ylabel => $percent ? "% of population" : "count",
+				ytics => { font => "'$ticfont'" },
+				xtics  => { labels => \@t, font => "'$ticfont'" },
+				size => $termsize,
+                                terminal => $format
+				);
+			#$chart->set(xtics => { labels => \@t }) if $#t >= 0;
+			#$chart->set("terminal size" => $termsize) if $termsize;
+
+			if($experimental) {
+				#$chart->set(boxwidth => 0.9);
+				#$chart->set(pm3d => "");
+				#$chart->set(view => "map");
+				$chart->set(yrange => "[0:1]") if $noyscale; 
+				my $dataSet = Chart::Gnuplot::DataSet->new(
+					xdata => \@ex,
+					ydata => \@ey,
+					zdata => \@ec,
+					style => "points lc rgbcolor variable pt 5 ps 1"
+					#style => "boxes lc rgbcolor variable fs solid 1"
+					);
+			
+				$chart->plot2d($dataSet);
+
+			}
+			else {
+				$chart->set(boxwidth => 0.9);
+				$chart->set(yrange => 
+					$noyscale ? $percent ? "[0:100]" 
+							     : "[0:$popsize[$g][$p]]"
+						  : "[0:]");
+	
+				my $dataSet = Chart::Gnuplot::DataSet->new(
+					xdata => \@x,
+					ydata => \@y,
+					zdata => \@c,
+					style => "boxes lc rgbcolor variable fs solid 1"
+					);
+			        
+				$chart->plot2d($dataSet);
+			}
+		}
+	}
+}
+}
+
+if( $latex ) {
+	generate_latex($output);
+} else {
+	generate_html($output);
+}
+
+sub add_individual {
+	my ($g, $p, $pop, $score, $flags) = @_;
+	$score = $score <= 1000 ? $score : 1000;
+	foreach(@patterns) {
+
+		my ($pattern,$rewriteto) = split(/\s*->\s*/, $_);
+		$pattern =~ s/\s+$//;
+		$rewriteto =~ s/^\s+//;
+	
+		for(;;) {
+			my $pat = $pattern;
+			my @allele = ($flags =~ /${pattern}\s/);
+
+			last unless @allele;
+
+			if($verbose) {
+				print "$& is $pattern\n";
+			}
+
+			if($rewriteto) {
+				my $what = $rewriteto;
+				$what =~ s/\$(\d+)/$allele[$1-1]/g;
+				@allele = split(/\s+/, $what);
+				$pat = shift(@allele);
+			}
+	
+			$flagnums{$pat} = (keys %flagnums) + 1 unless $flagnums{$pat};
+
+			my $alleleval = join(' ', @allele);
+	
+			$flags =~ s/${pattern}\s/ /;
+	
+			$pop->{$pat} = {} unless $pop->{$pat};
+
+			my $data = \$pop->{$pat}->{$alleleval};
+			$$data = {score => 0, count => 0} unless $$data;
+			$$data->{score} += $score;
+			$$data->{minscore} = $score unless $$data->{minscore};
+			$$data->{minscore} = $score if $score < $$data->{minscore};
+			$$data->{count} += 1;
+			
+			if($experimental) {
+				$$data->{all} = [] unless $$data->{all};
+				push(@{$$data->{all}}, $score);
+			}
+
+			$flagtics{$pat}{$alleleval} = 1;
+		}
+	}
+
+	$flags =~ s/\s+/ /g;
+	print "Ignored flags: $flags\n" if $flags and $verbose;
+		
+	$minscore = $score if $score < $minscore;
+
+	$totalscore += $score;
+	$totalsize += 1;
+
+	$localminscore[$g][$p] = $score unless $localminscore[$g][$p];
+	$localminscore[$g][$p] = $score if $score < $localminscore[$g][$p];
+
+	$popscore[$g][$p] = 0 unless $popscore[$g][$p];
+	$popscore[$g][$p] += $score;
+
+	$popsize[$g][$p] = 0 unless $popsize[$g][$p];
+	$popsize[$g][$p] += 1;
+
+	$localminscoreever[$p] = $score unless $localminscoreever[$p];
+	$localminscoreever[$p] = $score if $score < $localminscoreever[$p];
+	
+	$popscoreever[$p] = 0 unless $popscoreever[$p];
+	$popscoreever[$p] += $score;
+
+	$popsizeever[$p] = 0 unless $popsizeever[$p];
+	$popsizeever[$p] += 1;
+
+
+	#print "$pat @allele\n\t$$data->{score}\t$$data->{count}\n";
+
+}
+
+sub calc_color {
+	my ($g, $p, $col) = @_;
+	
+	my $min;
+	my $av;
+	my $max = 1000;
+
+	if( $clocal ) {
+		$min = $localminscore[$g][$p];
+		$av = $popscore[$g][$p] / $popsize[$g][$p];
+	} elsif( $cplacelocal ) {
+		$min = $localminscoreever[$p];
+		$av = $popscoreever[$p] / $popsizeever[$p];
+	} else {
+		$min = $minscore;
+		$av = $totalscore / $totalsize;
+	}
+
+	if( $cmaxscale ) {
+		$max = 2*$av - $min;
+	}
+
+	if( $nocscale ) {
+		$col /= $max;
+	} else {
+		$col = ($col - $min) / ($max - $min);
+	}
+
+	$col = 1 - $col;
+
+	$col = 0 if $col < 0;
+	$col = 1 if $col > 1;
+
+	$col **= $gamma;
+
+	return $col;
+
+}
+
+sub gencolor {
+	my ($col) = @_;
+
+	if($red) {
+		return rgb(1 - $col*$col, $col*$col, 0);
+	} else {
+		return rgb(0, $col, 0);
+	}
+}
+
+sub rgb {
+	my ($r, $g, $b) = @_;
+	return $r*255 << 16 | $g*255 << 8 | $b*255;
+}
+
+sub generate_html {
+	my ($output) = @_;
+	
+	print "generating $output.html\n";
+
+	open IHTML, "> $output.html" or die $!;
+	print IHTML "<!doctype html><html><body>\n";
+	
+	while( my ($flag,$i) = each(%flagnums)) {
+		print "generating $output-$i.html\n";
+		open HTML, "> $output-$i.html" or next;
+		print HTML "<!doctype html><html><body>\n";
+		print HTML "<h1>$flag</h1>\n";
+		print HTML "<table>\n";
+		for my $g (1 .. $#populations) {
+			print HTML "<tr>\n";
+			for my $p (1 .. $#{$populations[$g]}) {
+				#next unless $populations[$g][$p]->{$flag};
+				print HTML "<td>\n";
+				print HTML "<object data=\"$output-$g-$p-$i.$format\" />\n";
+				print HTML "</td>\n";
+			}
+			print HTML "</tr>\n";
+		}
+		print HTML "</table>\n";
+		print HTML "</body></html>";
+		close HTML;
+		print IHTML "<a href=$output-$i.html>$flag</a><br>\n";
+	}
+
+	print IHTML "</body></html>\n";
+	close IHTML;
+}
+
+sub generate_latex {
+	my ($output) = @_;
+	
+	print "generating $output.tex\n";
+
+	open TEX, "> $output.tex" or die $!;
+	print TEX "\\documentclass[a4paper]{article}\n";
+	print TEX "\\usepackage{graphicx}\n";
+	print TEX "\\begin{document}\n";
+	
+	while( my ($flag,$i) = each(%flagnums)) {
+		print TEX "\\section{$flag}\n";
+		#print TEX "\\begin{tabular}{}\n";
+		for my $g (1 .. $#populations) {
+			for my $p (1 .. $#{$populations[$g]}) {
+				next unless $populations[$g][$p]->{$flag};
+				print TEX "\\includegraphics{$output-$g-$p-$i.$format}";
+				if( $p == $#{$populations[$g]} ) {
+					print TEX " \\\\\n";
+				} else {
+					#print TEX " & ";
+				}
+			}
+		}
+		#print TEX "\\end{tabular}";
+	}
+
+	print TEX "\\end{document}\n";
+	close TEX;
+}
+
+
+
+__END__
+
+=head1 SYNOPSIS
+
+evovis [options] log-file
+
+=head1 OPTIONS
+
+=item B<--help>
+
+I have no idea what this option does.
+
+=item B<-o> output-name
+
+Set the prefix of generated file names.
+
+=item B<-c> configuration-file
+
+Use this configuration file. Configuration file is a list of patterns.
+
+=item B<-v>
+
+Verbose.
+
+=item B<--percent>
+
+Use percent of population instead of count.
+
+=item B<--noyscale>
+
+Don't scale Y axis. 
+
+=item B<--noxscale>
+
+Don't scale X axis.
+
+=item B<--nocscale>
+
+Don't scale color. This option makes the brightest color correspond to 0.
+
+=item B<--cbest>
+
+Use the best individual (instead of the average fitness) to color the bars.
+
+=item B<--clocal>
+
+Makes the meaning of color local to specific population and generation.
+
+=item B<--cplacelocal>
+
+Makes the meaning of color local to specific population but not generation.
+
+=item B<--cmaxscale>
+
+Make black correspond to average + (average - best).
+Seems to be meaningless with --nocscale.
+The effect should be close to the effect of --gamma.
+
+=item B<--onegen>
+
+Merge generations.
+
+=item B<--onepop>
+
+Merge populations
+
+=item B<--nounused>
+
+Don't add tics for unused values.
+(e.g. if we have two values of some parameter, 128 and 64, 
+then all values between them will be on the X axis without this flag)
+
+=item B<--format> format-eg-png
+
+Set the format of images.
+
+=item B<--size> "w,h"
+
+"0.5,0.5" is a good choice
+
+=item B<--gamma> g
+
+Gamma correction of bar color.
+
+=item B<--font> "Arial,12"
+
+Font.
+
+=item B<--ticfont> "Arial,12"
+
+Tics font.
+
+=item B<--alltics>
+
+Display all tics on X axis.
+

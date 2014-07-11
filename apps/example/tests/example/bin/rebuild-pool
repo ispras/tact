@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# rebuild-pool
+# POOL_DIR - path to pool
+# FLAGS - a list of flags
+
+# This script should rebuild those parts of code that are
+# important for this test
+
+/usr/bin/gcc $FLAGS $TEST_DIR/src/main.c -o $POOL_DIR/a.out

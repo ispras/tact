@@ -1,0 +1,977 @@
+#!/usr/bin/ruby
+
+require 'optparse'
+require 'fileutils'
+require 'thread'
+
+$options = {}
+command = ARGV[0]
+good_command = true
+
+# Help messages for commands
+commands_help = { "-h" => "",
+		  "--help" => "",
+		  "add-pools" => "Add pools for current test, using FLAGS for initial compilation",
+		  "check" => "Check many important things that are needed for correct tuning",
+		  "init-pool" => "Build specified POOL with FLAGS",
+		  "init-pools" => "Build initial pools with FLAGS",
+		  "init-shared" => "Build application shared dir with FLAGS",
+                  "init-target" => "Initializations on target testboard" ,
+		  "init-test" => "Init test: create all necessary directories",
+		  "rebuild-pool" => "Quickly rebuild specified POOL with FLAGS",
+		  "reduce-by-score" => "Reduce compile string by eliminating flags that make the score worse",
+		  "reduce-flags" => "Reduce compile string by eliminating useless flags",
+		  "reference-runs" => "Do reference-runs for each board",
+		  "single-run" => "Build with FLAGS, run application on BOARD and parse its results",
+		  "start-tuning" => "Start tuning",
+                  "restart-tuning" => "Restart tuning",
+		  "verify" => "Extract and verify best results from log DIR",
+		  "verify-file" => "Verify options from FILE",
+                  "package-run" => "Run package of applications"}
+
+# Mapping option name to option string
+option_strings = { "board" => "--flags FLAGS",
+		   "dir" => "--dir PATH",
+		   "flags" => "--flags FLAGS",
+		   "file" => "--file FILE",
+		   "label" => "--label LABEL",
+		   "number" => "--number N",
+		   "pool" => "--pool POOL"}
+
+# Hash of hashes which determine mandatory and optional options for commands.
+# true means mandatory option, false - optional.
+command_params = { "add-pools" => {"flags" => false},
+		   "check" => {},
+		   "init-pool" => {"flags" => false, "pool" => true},
+		   "init-pools" => {"flags" => false},
+		   "init-shared" => {"flags" => false},
+                   "init-target" => {},
+		   "init-test" => {"label" => false},
+		   "rebuild-pool" => {"flags" => false, "pool" => true},
+		   "reduce-by-score" => {},
+		   "reduce-flags" => {},
+		   "reference-runs" => {},
+		   "single-run" => {"flags" => false, "board" => true, "file" => false},
+		   "start-tuning" => {},
+                   "restart-tuning" => {"number" => 0},
+		   "verify" => {"dir" => "false"},
+		   "verify-file" => {"file" => true, "board" => false},
+                   "package-run" => {}}
+
+if !commands_help[command] or commands_help[command].empty?
+	good_command = false
+	ARGV[0] = '-h'
+	$stderr.puts "No command specified or unknown command.\n\n"
+end
+
+optparse = OptionParser.new do |opts|
+
+	usage = ""
+	if !good_command
+		usage = "Usage: tact COMMAND [options]\nCommands:\n"
+		command_params.keys.sort.each{ |k| usage += "\n#{k}\t\t- #{commands_help[k]}"}
+	else
+		usage = "Usage: tact #{command} "
+		command_params[command].each_pair{ |k,v|
+			usage += "[" if !v
+			usage += option_strings[k]
+			usage += "]" if !v
+			usage += " "
+		}
+		opts.banner = usage
+	end
+	opts.banner = usage
+
+	opts.separator(commands_help[command]) if good_command
+	opts.separator ""
+
+	if !good_command or command_params[command].size > 0
+		opts.separator("Command specific options:")
+	end
+	
+	if !good_command or command_params[command].has_key?("flags")
+		opts.on('-f','--flags FLAGS','Compiler flags') do |f|
+			$options[:flags] = f
+		end
+	end
+
+	if !good_command or command_params[command].has_key?("board")
+		opts.on('-b','--board BOARD_ID','Board id for test running') do |b|
+			$options[:board_id] = b
+		end
+	end
+
+	if !good_command or command_params[command].has_key?("label")
+		opts.on('-l','--label LABEL','Some text') do |l|
+			$options[:label] = l
+		end
+	end
+	
+
+	if !good_command or command_params[command].has_key?("number")
+		opts.on('-n','--number N','Integer value') do |n|
+			$options[:number] = n
+		end
+	end
+
+
+	if !good_command or command_params[command].has_key?("pool")
+		opts.on('-p','--pool POOL','Pool number or absolute path') do |p|
+			$options[:pool] = p
+		end
+	end
+
+	if !good_command or command_params[command].has_key?("file")
+		opts.on('-x','--file FILE', 'Path to file') do |f|
+			$options[:file] = f
+		end
+	end
+
+	if !good_command or command_params[command].has_key?("dir")
+		opts.on('-d','--dir PATH','Path to dir') do |d|
+			$options[:log_dir] = d
+		end
+	end
+	
+	opts.on_tail("-h", "--help","Show help") do
+		puts opts
+	        exit
+	end
+	
+end
+optparse.parse!(ARGV)
+
+if !ENV["TACT_DIR"] or ENV["TACT_DIR"].empty?
+	$stderr.puts "ERROR: TACT_DIR should be set.  Run `set_env` from tact top level bin dir first (backticks are mandatory)."
+	exit 1
+end
+
+if !File.directory?(ENV["TACT_DIR"])
+	$stderr.puts "ERROR: TACT_DIR should point to an existing directory."
+	exit 1
+end
+
+
+# Main directory is ok, It's time to load our libraries
+$LOAD_PATH.push(ENV["TACT_DIR"] + "/lib").uniq!
+require 'TestRunner.rb'
+require 'ConfParser.rb'
+require 'WorkDirPool.rb'
+require 'Evol.rb'
+require 'ParetoChartCreator.rb'
+require 'ReduceByScore.rb'
+require 'ReduceByBinaryHash.rb'
+
+$work_dir = Dir.pwd
+if $work_dir[/^.*\/packages\/.*$/]
+
+  /^(.*)\/packages\/[^\/]*$/ =~ $work_dir
+  $package_dir = $&
+
+  if !$package_dir 
+    $stderr.puts "ERROR: PACKAGE should be run within specific test directory, i.e. /home/user/tact/packages/PACKAGE_NAME/"
+    exit 1
+  end
+
+  ENV["PACKAGE_DIR"] = $package_dir
+
+  config = ConfParser.new
+  $build_config_package = config.static_params[:build_config]
+  $prime_package = config.static_params[:prime]
+  $baselines_package = config.static_params[:baselines]
+  $package_board_id = config.static_params[:board_id]  
+
+#  ENV["CC"] = $build_config_package 
+
+else
+
+  /^(.*)\/apps\/[^\/]*/ =~ $work_dir
+  $app_dir = $&
+ 
+  /^(.*)\/tests\/[^\/]*$/ =~ $work_dir
+  $test_dir = $&
+ 
+  if !$app_dir or !$test_dir
+  	$stderr.puts "ERROR: TACT should be run within specific test directory, i.e. /home/user/tact/apps/APP_NAME/tests/TEST_NAME"
+	exit 1
+  end
+
+  ENV["APP_DIR"] = $app_dir
+  ENV["TEST_DIR"] = $test_dir
+
+  $config = ConfParser.new
+
+  compiler =  $config.static_params[:compiler]
+  if !compiler or compiler.empty?
+	$stderr.puts "ERROR: compiler not found in tuning.conf (<compiler> tag)"
+	exit 1
+  end
+
+  ENV["GCC_BASE"] = compiler
+end
+$tact_dir = ENV["TACT_DIR"]
+
+def tact_error(str, critical = true)
+	$stderr.puts "ERROR: #{str}"
+	exit 1 if critical
+end
+
+# Add pools
+def handle_option_add_pools
+	flags = $options[:flags]
+	if flags.nil?
+		puts "No options specified, building with \"prime\" options from etc/tuning.conf"
+		flags = $config.static_params[:prime]
+	end
+
+	if $config.static_params[:num_testboards].nil? or !$config.static_params[:num_testboards]
+		tact_error('NUM_TESTBOARDS should be specified in config file')
+	end
+
+	if $config.static_params[:num_threads].nil? or !$config.static_params[:num_threads]
+		tact_error('THREADS_PER_TESTBOARD should be specified in config file')
+	end
+
+	num_pools = $config.static_params[:num_testboards] * $config.static_params[:num_threads]
+
+	puts "Initialised missing #{num_pools} pool directories."
+
+	threads = []
+	(1..num_pools).each {|i|
+		if !File.directory?("#{$test_dir}/pool/#{i}")
+			threads << Thread.new(i) { |pool|
+				handle_option_init_pool(pool,flags)
+			}
+		end
+	}
+	threads.each{|aThread|
+		aThread.join
+	}
+end
+
+# check that everything is ok
+def handle_option_check
+	puts '== Checking for proper \'set-env\':'
+	if !( $app_dir =~ /#{$tact_dir}\/apps\/.*/ )
+		tact_error('You have wrong enviroenment!')
+	end
+	puts "== Ok."
+
+  	puts "== Checking for unknown options:"
+	options = $config.options
+
+	compiler_options = `$CC -v --help 2>&1`
+
+	warnings = []
+
+	options.each { |option|
+	        option.help_name().each{ |name|
+	                if compiler_options[/#{name}/].nil?
+				warnings.push(name)
+	                end
+	        }
+	}
+
+	if !warnings.empty?
+		list = warnings.join(', ')
+		puts "== Warning!\nSome options may be unknown to the compiler: \n#{list}"
+	else
+	        puts "== Ok."
+	end
+
+	puts "== Checking that compute_binary_hash is equal for all pools:"
+	num_testboards = $config.static_params[:num_testboards]
+	threads = $config.static_params[:num_threads]
+	if num_testboards.nil?
+		tact_error('NUM_TESTBOARDS should be specified in config file')
+	end
+	if threads.nil?
+		tact_error('THREADS_PER_TESTBOARD should be specified in config file')
+	end
+
+	num_pools = num_testboards * threads
+	compute_binary_hash = get_script_path('bin/compute-binary-hash')
+	
+	ENV["POOL_DIR"] = "#{$test_dir}/pool/1"
+	reference_hash = `#{compute_binary_hash}`
+	ENV["POOL_DIR"] = ""
+
+	(2..num_pools).each{ |pool|
+		if !File.directory?("#{$test_dir}/pool/#{pool}")
+			tact_error("not enough pool dirs, rerun 'tact init-pools'")
+		end
+
+		ENV["POOL_DIR"] = "#{$test_dir}/pool/#{pool}"
+		if reference_hash != `#{compute_binary_hash}`
+			tact_error("Error: binary hashes for pool 1 and #{pool} are different!")
+		end
+		ENV["POOL_DIR"] = ""
+	}
+
+	puts "== Ok."
+
+	puts "== Checking that -O2 and -O0 have different hashes:"
+	puts "==   init-pool:"
+
+	stderr = $stderr.clone
+	stdout = $stdout.clone
+
+	$stderr.reopen("/dev/null", "w")
+        $stdout.reopen("/dev/null", "w")
+	if handle_option_init_pool("O2", "-O2") != 0
+		FileUtils.rm_rf("#{$test_dir}/pool/O2")
+		$stderr = stderr
+		tact_error('Building pool with -O2 failed.')
+	end
+	if handle_option_init_pool("O0", "-O0") != 0
+		FileUtils.rm_rf("#{$test_dir}/pool/O2")
+		$stderr = stderr
+		tact_error('Building pool with -O0 failed.')
+	end
+	$stderr = stderr.clone
+	$stdout = stdout.clone
+
+	ENV["POOL_DIR"] = "#{$test_dir}/pool/O2"
+	reference_hash = `#{compute_binary_hash}`
+	ENV["POOL_DIR"] = "#{$test_dir}/pool/O0"
+
+	if reference_hash == `#{compute_binary_hash}`
+		FileUtils.rm_rf("#{$test_dir}/pool/O2")
+		FileUtils.rm_rf("#{$test_dir}/pool/O0")
+		tact_error('-O2 and -O0 binary hash equal!')
+	end
+
+	puts "== Ok."
+	FileUtils.rm_rf("#{$test_dir}/pool/O0")
+
+	puts "==   rebuild-pool:"
+
+	$stderr.reopen("/dev/null", "w")
+        $stdout.reopen("/dev/null", "w")
+	if handle_option_init_pool("O0", "-O2") != 0
+		FileUtils.rm_rf("#{$test_dir}/pool/O0")
+		$stderr = stderr
+		tact_error('Building pool with -O2 failed.')
+	end
+
+	if handle_option_rebuild_pool("O2", "-O2") != 0
+		FileUtils.rm_rf("#{$test_dir}/pool/O2")
+		$stderr = stderr
+		tact_error('Rebuilding pool with -O2 failed.')
+	end
+	
+        if handle_option_rebuild_pool("O0", "-O0") != 0
+		FileUtils.rm_rf("#{$test_dir}/pool/O0")
+		$stderr = stderr
+		tact_error('Rebuilding pool with -O0 failed.')
+	end
+	$stdout = stdout.clone
+	$stderr = stderr.clone
+	
+	ENV["POOL_DIR"] = "#{$test_dir}/pool/O2"
+	reference_hash = `#{compute_binary_hash}`
+	ENV["POOL_DIR"] = "#{$test_dir}/pool/O0"
+
+	if reference_hash == `#{compute_binary_hash}`
+		FileUtils.rm_rf("#{$test_dir}/pool/O2")
+		FileUtils.rm_rf("#{$test_dir}/pool/O0")
+		tact_error('-O2 and -O0 binary hash equal!')
+	end
+
+	puts "== Ok."
+
+	FileUtils.rm_rf("#{$test_dir}/pool/O0")
+	FileUtils.rm_rf("#{$test_dir}/pool/check")
+
+  	puts "== Checking that compile with -funknown-compiler-option fails:"
+
+	puts "==   init-pool:"
+
+	$stderr.reopen("/dev/null", "w")
+        $stdout.reopen("/dev/null", "w")
+	if handle_option_init_pool("check", "-O2 -funknown-compiler-option") == 0
+		FileUtils.rm_rf("#{$test_dir}/pool/check")
+		FileUtils.rm_rf("#{$test_dir}/pool/O2")
+		$stderr = stderr
+		tact_error('init-pool returned zero exit code.')
+	end
+	$stdout = stdout.clone
+	$stderr = stderr.clone
+
+	puts "== Ok."
+
+	puts "== Run compute-size if exists for failed pool:"
+	compute_size = "#{$test_dir}/bin/compute-size"
+	compute_size = "#{$app_dir}/bin/compute-size" if !File.exists?(compute_size)
+	compute_size = nil if !File.exists?(compute_size)
+
+	if !compute_size.nil?
+		size = `#{compute_size} "#{$test_dir}/pool/check"`
+		if size.to_i != 0
+			FileUtils.rm_rf("#{$test_dir}/pool/check")
+	                FileUtils.rm_rf("#{$test_dir}/pool/O2")
+			tact_error("compute-size success after bad init-pool.\nSize - #{size}")
+		end
+	end
+
+	puts "== Ok."
+
+	puts "==   rebuild-pool:"
+
+	FileUtils.rm_rf("#{$test_dir}/pool/check")
+
+	$stderr.reopen("/dev/null", "w")
+        $stdout.reopen("/dev/null", "w")
+	if handle_option_rebuild_pool("O2", "-O2 -funknown-compiler-option") == 0
+		$stderr = stderr
+		FileUtils.rm_rf("#{$test_dir}/pool/O2")
+		tact_error('rebuild-pool finished successfully (returned 0).')
+	end
+	$stdout = stdout.clone
+	$stderr = stderr.clone
+
+	puts "== Run compute-size if exists for failed pool:"
+
+	if !compute_size.nil?
+		size = `#{compute_size} "#{$test_dir}/pool/O2"`
+		if size.to_i != 0
+	                FileUtils.rm_rf("#{$test_dir}/pool/O2")
+			tact_error("compute-size success after bad rebuild-pool.")
+		end
+	end
+
+	puts "== Ok."
+
+	FileUtils.rm_rf("#{$test_dir}/pool/O2")
+
+	puts "== Ok. All checks passed!"
+
+end
+
+# init pool POOL with FLAGS
+def handle_option_init_pool(pool = nil, pflags = nil)
+	pid = fork do
+                if $options[:pool].nil? and pool.nil?
+		        tact_error("'init-pool' require '--pool POOL' option, see 'tact init-pool --help' for more details.")
+	        end
+
+        	flags = $options[:flags]
+	        flags = pflags if !flags
+        	if flags.nil?
+	        	puts "No options specified, building with \"prime\" options from etc/tuning.conf"
+		        flags = $config.static_params[:prime]
+	        else
+		        puts "Building with flags: '#{flags}'"
+        	end
+
+	        ENV["FLAGS"] = flags
+	        ENV["MAKE_DIST_CLEAN"] = "yes"
+
+	        pool_dir = $options[:pool]
+        	pool_dir = pool if !pool_dir
+	        pool_dir = "#{$test_dir}/pool/#{pool_dir}" if pool_dir[0] != '/'
+
+        	ENV["POOL_DIR"] = pool_dir
+
+	        ["build","log","run"].each { |dir|
+		        if !File.directory?("#{pool_dir}/#{dir}")
+			        puts "Creating #{pool_dir}/#{dir}..."
+        			FileUtils.mkdir_p("#{pool_dir}/#{dir}")
+	        	end
+        	}
+
+        	puts "Building pool #{pool_dir} from scratch with options '#{flags}'"
+
+                init_script = get_script_path('bin/init-pool')
+
+        	if run_system(init_script) != 0
+        		tact_error("Building pool '#{pool_dir}' failed.")
+        	end
+
+        	puts "SUCCESS: Pool '#{pool_dir}' built."
+        	exit 0
+	end
+	Process.wait(pid)
+	return $?.exitstatus
+end
+
+# Init pools
+def handle_option_init_pools
+	
+        flags = $options[:flags]
+	if flags.nil?
+		puts "No options specified, building with \"prime\" options from etc/tuning.conf"
+		flags = $config.static_params[:prime]
+	end
+
+	if $config.static_params[:num_testboards].nil? or !$config.static_params[:num_testboards]
+		tact_error('NUM_TESTBOARDS should be specified in config file')
+	end
+        
+        if $config.static_params[:num_threads].nil? or !$config.static_params[:num_threads]
+		tact_error('THREADS_PER_TESTBOARD should be specified in config file')
+	end
+
+	num_pools = $config.static_params[:num_testboards] * $config.static_params[:num_threads]
+
+	puts "Initializing #{num_pools} pool directories."
+
+	threads = []
+	(1..num_pools).each {|i|
+		threads << Thread.new(i) { |pool|
+			handle_option_init_pool(pool,flags)
+		}
+	}
+	threads.each{|aThread|
+		aThread.join
+	}
+end
+
+# init-test
+def handle_option_init_test
+
+	if !File.directory?("#{$test_dir}/log")
+		puts "Creating log dir..."
+		Dir.mkdir("#{$test_dir}/log")
+	end
+
+	require 'date'
+	label = DateTime.now.strftime("%F-%T")
+	label = "#{label}-#{$options[:label]}" if !$options[:label].nil?
+
+	log_dir = "#{$test_dir}/log/#{label}"
+	log_current = "#{$test_dir}/log/current"
+	
+	if File.directory?(log_dir)
+		tact_error("Error: log/#{label} directory already exists")
+	else
+		Dir.mkdir(log_dir)
+	end
+
+	if File.exist?(log_current) && !File.symlink?(log_current)
+		FileUtils.rm_rf(log_dir)
+		tact_error("'log/current' should be a symlink")
+	else
+		FileUtils.rm_rf(log_current)
+		File.symlink(log_dir,log_current)
+	end
+
+	["etc","ref","runs","reports"].each{|dir| Dir.mkdir("#{log_dir}/#{dir}")}
+
+	if $config.runtime_params[:measure] == "pareto"
+		Dir.mkdir("#{log_dir}/archives")
+	end
+
+	FileUtils.cp("#{$test_dir}/etc/tuning.conf","#{log_dir}/etc/tuning.conf")
+	FileUtils.cp("#{$test_dir}/etc/test-descr.xml","#{log_dir}/etc/test-descr.xml")
+
+	puts "Done."
+end
+
+# init shared libraries for test
+def handle_option_init_shared
+	if !File.directory?("#{$app_dir}/shared/build")
+		Dir.mkdir("#{$app_dir}/shared/build")
+	end
+	pid = fork do
+		init_script = get_script_path('bin/init-shared')
+
+		if run_system(init_script) != 0
+			tact_error("Init shared libraries failed.")
+		else	
+
+			puts "SUCCESS: shared libraries built."
+			exit(0)
+		end
+	end
+	Process.wait(pid)
+end
+
+# initializations on target testboard FIXME
+def handle_option_init_target
+        boards = $config.static_params[:boards].uniq
+
+        init_target_script = get_script_path('bin/init-target')
+
+        boards.each { |testboard|
+        
+          system("#{ENV["TACT_DIR"]}/task_manager/runb --board_id #{testboard} --command \"sh -c \\\"true ; export APP_DIR=#{ENV["APP_DIR"]}; export TEST_DIR=#{ENV["TEST_DIR"]}; sudo chroot nfs #{init_target_script} \\\"\"")
+          if $?.exitstatus != 0 
+            tact_error("Init target failed on #{testboard}.")
+          else
+            puts "SUCCESS: Initializations on #{testboard} ."
+          end
+        }
+
+end
+
+# Rebuild pool - quickly rebuild pool with given FLAGS
+def handle_option_rebuild_pool(pool = nil, pflags = nil)
+	if $options[:pool].nil? and pool.nil?
+		tact_error("'rebuild-pool' require '--pool POOL' option, see 'tact rebuild-pool --help' for more details.")
+	end
+
+	flags = $options[:flags]
+	flags = pflags if !flags
+	if flags.nil?
+		puts "No options specified, building with \"prime\" options from etc/tuning.conf"
+		flags = $config.static_params[:prime]
+	else
+		flags = $config.static_params[:prime] + " #{flags}"
+		puts "Building with flags: '#{flags}'"
+	end
+
+	ENV["FLAGS"] = flags
+	ENV["MAKE_DIST_CLEAN"] = "no"
+
+	pid = fork do
+		pool_dir = $options[:pool]
+		pool_dir = pool if !pool_dir
+		pool_dir = "#{$test_dir}/pool/#{pool_dir}" if pool_dir[0] != '/'
+
+		ENV["POOL_DIR"] = pool_dir
+
+		puts "Quickly rebuilding pool #{pool_dir} with options '#{flags}'"
+
+		init_script = get_script_path('bin/rebuild-pool')
+
+		if run_system(init_script) != 0
+			tact_error("Rebuilding pool '#{pool_dir}' failed.")
+		end
+
+		puts "SUCCESS: Pool '#{pool_dir}' rebuilt."
+		exit 0
+	end
+	Process.wait(pid)
+	return $?.exitstatus
+end
+
+def handle_option_reduce_flags
+  $config.static_params[:pop_join].each_key{ |class_board|
+
+    if !File.directory?("#{$test_dir}/log/current/best_#{class_board}/")
+      tact_error("No such directory: #{$test_dir}/log/current/best_#{class_board}/. \n You should run 'tact verify'.")
+    end
+
+    if !File.directory?("#{$test_dir}/log/current/reduce-flags-cache/")
+      Dir.mkdir("#{$test_dir}/log/current/reduce-flags-cache/")
+    end
+
+    if !File.directory?("#{$test_dir}/log/current/best-reduced_#{class_board}/")
+      Dir.mkdir("#{$test_dir}/log/current/best-reduced_#{class_board}/") 
+    end  
+
+    first_string = Dir.entries("#{$test_dir}/log/current/best_#{class_board}/").select{|v| v =~ /(.*).xml$/}.sort[0]
+    first_path = "#{$test_dir}/log/current/best_#{class_board}/#{first_string}"
+    Reduce_by_binary_hash.new(first_path, $config, class_board, true)   
+    threads = [] 
+    Dir.entries("#{$test_dir}/log/current/best_#{class_board}/").select{|v| v =~ /(.*).xml$/}.sort.reject{|v| v == first_string}.each{ |string|
+      threads << Thread.new(string) { |best_string|
+        from = "#{$test_dir}/log/current/best_#{class_board}/#{best_string}"
+        reduce_flags = Reduce_by_binary_hash.new(from, $config, class_board)  
+      }
+    }
+    threads.each { |mythread|
+      mythread.join
+    }
+  }
+
+end
+
+def handle_option_reduce_by_score
+  $config.static_params[:pop_join].each_key{ |class_board|
+    if !File.directory?("#{$test_dir}/log/current/best-reduced_#{class_board}/")
+      tact_error("No such directory: #{$test_dir}/log/current/best-reduced_#{class_board}/. \n You should run 'tact reduce-flags' first.")
+    end
+
+    FileUtils.mkdir_p("#{$test_dir}/log/current/best-byscore-reduced_#{class_board}/")
+    FileUtils.mkdir_p("#{$test_dir}/log/current/score-by-flag-runs_#{class_board}/")
+
+    Dir.entries("#{$test_dir}/log/current/best-reduced_#{class_board}/").select{|v| v =~ /(.*).xml$/}.sort.each{ |best_string|
+      reduced_xml = "#{$test_dir}/log/current/best-reduced_#{class_board}/#{best_string}"
+      reduce_by_score = Reduce_by_score.new(reduced_xml, $config, class_board)
+    }
+
+  }
+end
+
+# Reference runs - this function should run test for all 'baselines' from etc/tuning.conf
+# and save results in log/current/ref/*.xml
+def handle_option_reference_runs
+
+	boards = $config.static_params[:boards].uniq
+
+	# we should have at least one board specified
+	if boards.nil? or boards.size < 1
+		tact_error("you should specify at least one board in etc/tuning.conf")
+	end
+
+	baselines = $config.static_params[:baselines]
+	if baselines.nil? or !baselines.size
+		tact_error("you should specify at least one baseline in etc/tuning.conf")
+	end
+
+	ref_dir = "#{$test_dir}/log/current/ref"
+
+	ref_exist = false
+	puts "We are here"
+	puts ": #{boards}"
+	boards.each{|board| 
+		puts "#{ref_dir}/#{board}-1.xml"
+		ref_exist = true if File.exist?("#{ref_dir}/#{board}-1.xml")
+	}
+	puts "ref : #{ref_exist} "
+
+	if ref_exist
+		begin
+			puts <<EOF
+A reference files already exist in '#{ref_dir}/ref'. If you're
+starting a new tuning session, you may consider execute 'tact init-test' before.
+Press enter to continue or Ctrl+C to quit.
+EOF
+			$stdin.gets
+		rescue Exception => e
+			exit 0
+		end
+	end
+
+	Dir.mkdir(ref_dir) if !File.directory?(ref_dir)
+
+	threads = []
+	  boards.each { |board|
+	    threads << Thread.new(board) { |testboard|
+              inner_threads = []
+              current_baseline = 1
+              baselines.each_index { |line|
+                inner_threads << Thread.new(line) { |index|
+                  params = $config.runtime_params.clone
+                  i = index + 1
+		  
+                  params[:reference_run] = true
+		  params[:board_id] = testboard
+		  params[:compile_options] = baselines[index]
+		  params[:xml_run_log] = "#{ref_dir}/#{testboard}-#{i}.xml"
+
+		  puts "Creating #{ref_dir}/#{testboard}-#{i}.xml"
+
+		  runner = TestRunner.new(params)
+		  if params[:measure] == "pareto"
+		    value = runner.score
+		    binary_size = runner.binary_size
+		    if !value.nil? and !binary_size.nil?
+		      chart_dat = "#{ref_dir}/#{testboard}-#{i}.dat"
+		      file = File.open(chart_dat, "w")
+		      file.puts "\"flags\" \"#{baselines[index]}\""
+		      file.puts "#{value} #{binary_size}"
+		      file.close
+		    end
+		  end
+                }
+	      }
+  
+              inner_threads.each { |aThread|
+                aThread.join
+              }
+
+            }
+          }
+          threads.each{|aThread|
+	    aThread.join
+	  }
+end
+
+# single run with given options
+def handle_option_single_run(pflags = nil,pboard = nil,pxml=nil)
+	flags = (pflags.nil?) ? $options[:flags] : pflags
+	
+	if flags.nil?
+		puts "No options specified, building with \"prime\" options from etc/tuning.conf"
+                flags = $config.static_params[:prime]
+	else
+		puts "Building with: '#{flags}'"
+	end
+
+	params = $config.runtime_params.clone
+	params[:board_id] = (pboard.nil?) ? $options[:board_id] : pboard
+	params[:compile_options] = flags
+	params[:xml_run_log] = (pxml.nil?) ? $options[:file] : pxml
+	runner = TestRunner.new(params)
+end
+
+# Start main tuning process
+def handle_option_start_tuning
+  num_testboards = $config.static_params[:num_testboards]
+  if !num_testboards
+    puts "Error: NUM_TESTBOARDS should be specified in tuning.conf file"
+    exit 1
+  end
+
+  boards = $config.static_params[:boards].uniq
+  
+  boards.each{ |board_id|
+    if !File.exist?( "#{$test_dir}/log/current/ref/#{board_id}-1.xml") 
+      puts "No reference run (#{board_id}-1.xml) for testboard #{board_id}.  Please run 'tact reference-runs' first"
+      exit 1
+    end
+  }
+
+  gen = Generation.new(0)
+  gen.run
+
+end
+
+# Restart main tuning process
+def handle_option_restart_tuning
+  gen = Generation.new($options[:number])
+  gen.run
+end
+
+
+# verify results
+def handle_option_verify
+	if $options[:log_dir].nil?
+		puts "No directory specified for verification, assuming 'current'"
+		verify_dir = "#{$test_dir}/log/current"
+	else
+		verify_dir = "#{$test_dir}/log/#{$options[:log_dir]}"
+	end
+	
+	if !File.directory?(verify_dir)
+		tact_error("Directory '#{verify_dir}' doesn't exists!")
+	end
+	
+	# FIXME all boards loop ??? here or after best-extractor ?
+
+        $config.static_params[:pop_join].each_key{ |class_board|
+          if !File.directory?("#{verify_dir}/best_#{class_board}")
+            tact_error("Directory '#{verify_dir}/best_#{class_board}' doesn't exists!")
+            next
+          end
+
+          board = $config.static_params[:pop_join][class_board][0]
+	  if $config.runtime_params[:measure] == "pareto"
+                  puts "Creating overall pareto-front..."
+                  create_chart("#{verify_dir}/joint_archives_#{class_board}", board, true)
+          end
+
+	  puts "Creating report..."
+	  if run_system("#{$tact_dir}/lib/report-maker.rb \"#{verify_dir}/best_#{class_board}\" ") != 0
+		tact_error("Creating report for pareto failed.")
+	  end
+
+   	  puts "Done."
+	
+        }
+end
+
+# get results for all option strings from file
+def handle_option_verify_file
+	if $options[:file].nil?
+		tact_error("No file with options specified for verifying.")
+	end
+	
+	if !File.exists?($options[:file])
+		tact_error("File #{$options[:file]} doesn't exists.")
+	end
+
+	boards = []
+	
+	if $options[:board_id].nil?
+		puts "No board id specified for verifying. File will be verified on all boards from etc/tuning.conf !"
+		boards = $config.static_params[:boards].uniq
+	else
+		boards.push($options[:board_id])
+	end
+
+	FileUtils.mkdir_p("#{$test_dir}/verified/")
+	FileUtils.rm_rf("#{$test_dir}/verified/*")
+
+	threads = []
+	boards.each { |board|
+		threads << Thread.new(board) { |testboard|
+			input = File.open($options[:file],'r')
+			line_num = 1
+			while (line = input.gets)
+				out_xml = "#{$test_dir}/log/current/verified/verified-xml-board-#{testboard}-using-opts-#{line_num}.xml"
+				handle_option_single_run(line,testboard,out_xml)
+				line_num = line_num + 1
+			end
+		}
+        }
+        
+        threads.each{|aThread|
+		aThread.join
+	}
+	
+	puts "Creating report..."
+	if run_system("#{$tact_dir}/lib/report-maker.rb \"#{$test_dir}/log/current/verified/\"") != 0
+		tact_error("Creating report failed.")
+	end	
+
+end
+
+def handle_option_package_run
+  puts Dir.pwd
+  test_set = Dir.new("#{$package_dir}/test_set").entries.delete_if{|file| !File.symlink?("#{$package_dir}/test_set/#{file}")}
+
+  if !File.directory?("#{$package_dir}/log")
+    puts "Creating log dir..."
+    Dir.mkdir("#{$package_dir}/log")
+  end
+
+  require 'date'
+  label = DateTime.now.strftime("%F-%T")
+
+  log_dir = "#{$package_dir}/log/#{label}"
+  log_current = "#{$package_dir}/log/current"
+
+  if File.directory?(log_dir)
+    tact_error("Error: log/#{label} directory already exists")
+  else
+    Dir.mkdir(log_dir)
+  end
+
+  if File.exist?(log_current) && !File.symlink?(log_current)
+    FileUtils.rm_rf(log_dir)
+    tact_error("'log/current' should be a symlink")
+  else
+    FileUtils.rm_rf(log_current)
+    File.symlink(log_dir,log_current)
+  end
+
+  ["etc","tests"].each{|dir| Dir.mkdir("#{log_dir}/#{dir}")}
+  
+  test_set.each{ |test_name|
+    FileUtils.mkdir_p("#{$package_dir}/log/current/tests/#{test_name}")
+
+    $test_dir = File.readlink("#{$package_dir}/test_set/#{test_name}")
+    $app_dir = File.dirname(File.dirname($test_dir))
+    FileUtils.cp_r("#{$test_dir}/etc", "#{$package_dir}/log/current/tests/#{test_name}")
+    FileUtils.cd($test_dir)
+    puts Dir.pwd 
+
+    ENV["APP_DIR"] = $app_dir
+    ENV["TEST_DIR"] = $test_dir
+
+    $config = ConfParser.new
+    ENV["CC"] = $build_config_package
+    $config.static_params[:boards] = [$package_board_id]
+
+    if !File.exists?("#{$test_dir}/log/current/ref/#{$package_board_id}-1.xml")
+      handle_option_init_test
+      handle_option_init_pools
+      handle_option_init_shared if File.exist?("#{$app_dir}/bin/init-shared")
+      handle_option_reference_runs
+    end
+    handle_option_single_run($prime_package, $package_board_id, "#{$package_dir}/log/current/tests/#{test_name}/ref.xml")
+
+    (0...$baselines_package.size).each{ |i|
+    handle_option_single_run($baselines_package[i], $package_board_id, "#{$package_dir}/log/current/tests/#{test_name}/#{i+1}.xml")
+    }
+    FileUtils.cd($package_dir)
+  }
+  system("#{$tact_dir}/lib/report-package.rb #{$package_dir}")
+end
+
+# Run command
+__send__ ("handle_option_#{command.gsub(/-/,'_')}")

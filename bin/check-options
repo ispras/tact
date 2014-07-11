@@ -1,0 +1,27 @@
+#!/usr/bin/ruby
+
+$LOAD_PATH.push(ENV["TACT_DIR"] + "/lib").uniq!
+require 'ConfParser.rb'
+
+config = ConfParser.new
+options = config.options
+compiler = config.static_params[:compiler]
+
+compiler_options = `$CC -v --help 2>&1`
+
+warnings = []
+
+options.each { |option|
+	option.help_name().each{ |name|
+		if compiler_options[/#{name}/].nil?
+			warnings.push(name)
+		end
+	}
+}
+
+if !warnings.empty?
+	list = warnings.join(', ')
+	puts "Warning!\nSome options may be unknown to the compiler: \n#{list}"
+else
+	puts "Ok."
+end

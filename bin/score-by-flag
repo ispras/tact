@@ -1,0 +1,196 @@
+#!/usr/bin/ruby
+
+require 'rexml/document'
+require 'set'
+require 'optparse'
+#require File.expand_path(File.dirname(__FILE__)) + '/../lib/common.rb'
+#require File.expand_path(File.dirname(__FILE__)) + '/../lib/Evol.rb'
+require File.expand_path(File.dirname(__FILE__)) + '/../lib/TestRunner.rb'
+require File.expand_path(File.dirname(__FILE__)) + '/../lib/FlagsParser.rb'
+require File.expand_path(File.dirname(__FILE__)) + '/../lib/ConfParser.rb'
+include REXML
+include Math
+
+@output = nil
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: $0 [options]"
+  opts.on("--output OUT", "Put the results to this file") do |o|
+    @output = o
+  end
+end.parse!(ARGV)
+@init_samples = samples_from_files(ARGV)
+@board_id = nil
+ARGV.each{|file|
+	if file =~ /.*\/(.*)-1\.xml/
+		@board_id = $1
+	end
+}
+if @board_id.nil?
+	$stderr.puts "Unknown board_id!"
+	exit(1)
+end
+@cachedir = "log/current/score-by-flag-runs/"
+tactConf = ConfParser.new()
+@params = tactConf.runtime_params
+@greater_is_better = @params[:greater_is_better]
+
+@direction = @greater_is_better ? -1 : 1
+
+@measure = @params[:measure]
+
+def pareto_dist(a, b)
+  coef_sign = 0
+  return nil if b[:score].nil? or b[:binary_size].nil?
+  return nil if a[:score].nil? or a[:binary_size].nil?
+  if b[:score] <= a[:score] and b[:binary_size] <= a[:binary_size]
+    coef_sign = 1
+  else
+    coef_sign = -1
+  end
+  
+  size_diff = a[:binary_size] - b[:binary_size]
+  score_diff = a[:score] - b[:score]
+  dist = coef_sign * Math.sqrt(size_diff**2 + (@coeficent * score_diff)**2)
+  return dist
+end
+
+def run(flags, prefix="")
+
+  comp_str = flags_to_string(flags)
+  puts "CHECKING #{comp_str}"
+
+  `mkdir -p "#{@cachedir}"`
+  rand_name = prefix + (0...16).map{ ('a'..'z').to_a[rand(26)] }.join
+  begin
+	  new_params = @params.clone
+	  new_params.merge!({
+	      :compile_options => comp_str,
+	      :generation_num => 0,
+	      :population_num => 1,
+	      :run_num => nil,
+	      :compile_only => false,
+	      :xml_run_log => "#{@cachedir}/#{rand_name}.xml",
+	      :reference_run => false,
+	      :unfailing => true,
+	      :board_id => @board_id
+	    })
+	    
+  runner = TestRunner.new(new_params)
+    if runner != nil
+      score = runner.score
+      binary_size = runner.binary_size
+    else
+      score = nil
+      binary_size = nil
+    end
+  rescue SystemExit => e
+    score = nil
+    binary_size = nil
+  end
+
+  puts "XML: #{@cachedir}/#{rand_name}.xml"
+  puts "SCORE: #{score} BINARY_SIZE: #{binary_size}\n"
+
+  new = {:flags => flags, :file => "#{@cachedir}/#{rand_name}.xml", :score => score == nil ? nil : score.to_f, :binary_size => binary_size == nil ? nil : binary_size.to_i}
+
+  return new
+end
+
+@c = nil
+@flag = nil
+@bestscore = nil
+@order1 = @order.clone
+
+def reduce(a, b)
+  d = diff(a, b).to_a
+  if d.size > 0
+    d.sort! {|a1,b1| @order1[b1] <=> @order1[a1]}
+
+    cs = []
+
+    d.each do |f|
+      @flag = f
+      cf = a[:flags].clone
+      cf[f] = b[:flags][f]
+      @c = run(cf)
+
+      @c[:dist] = pareto_dist(a, @c) if @measure == "pareto"
+      system(" echo score: #{@c[:score]} binary_size: #{@c[:binary_size]} dist: #{@c[:dist]} >> log/current/reduce-by-flag-reports" )
+
+      cs.push(@c) if @c[:score] == nil or @c[:score] > 0
+
+      break if @c[:score] != nil and @c[:score] > 0 and a[:score] != nil and @c[:score] * @direction < a[:score] * @direction and @measure != "pareto"
+      
+      break if @c[:score] != nil and @c[:score] > 0 and a[:score] != nil and @c[:score] * @direction <= a[:score] * @direction and @c[:binary_size] * @direction <= a[:binary_size] * @direction and @measure == "pareto"
+ 
+      if @c[:score] != nil && a[:score] != nil
+        @order1[f] = (a[:score] - @c[:score]) * @direction
+      end
+
+      if (@c[:score] == nil or @c[:score] < 0) and a[:score] != nil
+        @order1[f] = -a[:score]
+      end
+    end
+
+    if @measure == "pareto"
+      c = cs.max {|a1,b1| 
+	    ad = a1[:dist]
+	    bd = b1[:dist]
+	    cr = nil
+	    cr = 0 if ad == nil && bd == nil
+	    cr = -1 if ad == nil && cr == nil
+	    cr = 1 if bd == nil && cr == nil
+	    cr = bd <=> ad if @greater_is_better && cr == nil
+	    cr = ad <=> bd if cr == nil
+	    cr
+      }
+    else
+      c = cs.min {|a1,b1| 
+	    as = a1[:score]
+	    bs = b1[:score]
+	    cr = nil
+	    cr = 0 if as == nil && bs == nil
+	    cr = 1 if as == nil && cr == nil
+	    cr = -1 if bs == nil && cr == nil
+	    cr = bs <=> as if @greater_is_better && cr == nil
+	    cr = as <=> bs if cr == nil
+	    cr
+      }
+    end
+     system(" echo THE BEST score: #{c[:score]} binary_size: #{c[:binary_size]} dist: #{c[:dist]} >> log/current/reduce-by-flag-reports" )
+
+   puts "WIN SCORE: #{c[:score]} BINARY_SIZE: #{c[:binary_size]} #{flags_to_string(c[:flags])}" if c != nil
+    if @measure == "pareto"
+      if c!= nil and c[:score] != nil and c[:binary_size] != nil and c[:dist] != nil and c[:dist] > 0 and c[:binary_size] <= @orig[:binary_size] and c[:score] <= @orig[:score]
+        @bestdist = c[:dist]
+        `cp "#{c[:file]}" "#{@output}"`
+      end
+    else
+      if c != nil and c[:score] != nil and (@bestscore == nil or c[:score] * @direction < @bestscore * @direction)
+        @bestscore = c[:score]
+        `cp "#{c[:file]}" "#{@output}"`
+      end
+    end
+
+    # incorrect flag in the output!
+    # puts "#{a[:flags][@flag]}\t\t#{a[:score] - c[:score]}"
+    reduce(c, b)
+  end
+end
+
+@init_samples[0] = run(@init_samples[0][:flags])
+
+if @measure == "pareto"
+  @bestdist = 0
+  @coeficent = @init_samples[0][:binary_size] / @init_samples[0][:score]
+  @orig = @init_samples[0].clone
+else
+  @bestscore = @init_samples[0][:score]
+end
+
+@bestscore = @init_samples[0][:score]
+`cp "#{@init_samples[0][:file]}" "#{@output}"`
+system("echo new file >> log/current/reduce-by-flag-reports")
+
+reduce(@init_samples[0], @init_samples[1])

@@ -1,0 +1,21 @@
+#!/usr/bin/ruby
+
+require 'rexml/document'
+include REXML
+
+
+if !ENV.has_key?('TEST_DIR') || !ENV.has_key?('FLAGS')
+    puts 'error: TEST_DIR and FLAGS environment variables should be set'
+    exit 2
+end
+
+xmldata = Document.new
+benchmark_run = xmldata.add_element("benchmark_run", 
+    { "result" => "compile_error",
+      "compile_str" => ENV['FLAGS']
+      })
+
+# Output XML file
+xmldata.write($stdout, 2)
+# Add extra newline at the end of file
+puts

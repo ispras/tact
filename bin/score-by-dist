@@ -1,0 +1,112 @@
+#!/usr/bin/ruby
+
+require 'rexml/document'
+require 'set'
+require 'optparse'
+require 'narray'
+require File.expand_path(File.dirname(__FILE__)) + '/../lib/common.rb'
+require File.expand_path(File.dirname(__FILE__)) + '/../lib/FlagsParser.rb'
+include REXML
+include Math
+
+@profile = false
+@deltas = false
+@fails = false
+@abs = false
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: $0 [options]"
+  opts.on("--profile", "Do profiling") do
+    @profile = true
+  end
+  opts.on("--deltas", "Output contributions of flags to errors") do
+    @deltas = true
+  end
+  opts.on("--fails", "Output contributions of flags to failures") do
+    @fails = true
+  end
+  opts.on("--abs", "Absolute mode") do
+    @abs = true
+  end
+end.parse!(ARGV)
+
+def solve(matrix, rhs)
+  rhs = matrix.transpose * rhs
+  matrix = matrix.transpose * matrix
+  
+  diag = matrix.clone.fill(0.0).diagonal(0.01)
+  matrix = matrix + diag
+
+  return rhs / matrix
+end
+
+@init_samples = samples_from_log(ARGV[0], @fails)
+
+@init_samples.sort! {|a1,b1| a1[:score] <=> b1[:score]}
+# @init_samples = @init_samples[0, 500]
+
+base = @init_samples[@init_samples.length / 2]
+
+if @abs
+  @abs_flags = @all_flags.to_a.map {|f| @flags_values[f].map {|v| [f,v]} }.flatten(1)
+else
+  @abs_flags = @all_flags.to_a.map {|f| [f,base[:flags][f]]}
+end
+
+$stderr.puts "abs_flags constructed"
+
+matrix_original = NMatrix.to_na(@init_samples.map {|s| @abs_flags.map {|f,v|
+                                    s[:flags][f] == v ? 1.0 : 0.0
+                                  }.flatten(1)})
+
+$stderr.puts "matrix constructed"
+
+if @fails
+  rhs_fails = NVector.to_na(@init_samples.map {|s| s[:fail] ? 1.0 : 0.0})
+  lhs_fails = solve(matrix_original, rhs_fails)
+
+  n = 0
+  @abs_flags.to_a.each do |f,v|
+    puts "#{lhs_fails[n]} #{v}"
+    n += 1
+  end
+
+  rhs_check = (matrix_original * lhs_fails).to_a.map {|v| v < 0.5 ? 0 : 1}
+  perc = rhs_check.zip(rhs_fails.to_a).map {|a,b| a == b ? 1.0 : 0.0}.inject(:+) / rhs_check.size
+  $stderr.puts "guessed #{perc*100}%"
+
+  exit  
+end
+
+rhs_original = NVector.to_na(@init_samples.map {|s| s[:score].to_f - base[:score].to_f})
+
+lhs = solve(matrix_original, rhs_original)
+
+if @deltas
+  rhs_new = matrix_original * lhs
+  rhs_prime = NVector.to_na((rhs_new - rhs_original).to_a.map {|v| v.abs})
+  delt = solve(matrix_original, rhs_prime)
+
+  n = 0
+  @all_flags.to_a.each do |f|
+    puts "#{delt[n]} #{f}"
+    n += 1
+  end
+
+  exit
+end
+
+flags_weights = Hash.new
+n = 0
+@all_flags.to_a.each do |f|
+  flags_weights[f] = lhs[n]
+  n += 1
+end
+
+@init_samples.each do |t|
+  d = 0
+  diff(base,t).each do |f|
+    d += flags_weights[f]
+  end
+  puts "#{d} #{t[:score] - base[:score]}"
+end

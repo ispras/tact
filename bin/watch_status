@@ -1,0 +1,1 @@
+watch -t -d -n 0.5 cat pool/*/status

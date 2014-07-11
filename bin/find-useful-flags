@@ -1,0 +1,241 @@
+#!/usr/bin/ruby
+
+require 'rexml/document'
+require 'set'
+require File.expand_path(File.dirname(__FILE__)) + '/../lib/common.rb'
+include REXML
+include Math
+
+####################################################################################################
+
+@all_flags = Set.new
+
+def normalize(flag)
+  r = \
+  case flag
+  when /^(.+)=(.*)$/
+    $1
+  when /^-fno-(.+)$/
+    "-f" + $1
+  when /^-mno-(.+)$/
+    "-m" + $1
+  when /^-DNO_(.+)$/
+    "-D" + $1
+  when /^(-f.+)$/
+    $1
+  when /^(-m.+)$/
+    $1
+  when /^(-D.+)$/
+    $1
+  when /^(.+)$/
+    $1
+  end
+  @all_flags.add(r)
+  return r
+end
+
+def parse_flags(compile_str)
+  if compile_str.match(/(\s*(--param\s+\S+|\S+)\s*)*/)
+    return Hash[compile_str.scan(/\s*(--param\s+\S+|\S+)\s*/).map {|f| [normalize(f[0]), f[0]]}]
+  else
+    $stderr.puts "Wrong compile string! ignored"
+  end
+end
+
+init_samples = ARGV.map {|a|
+  begin 
+    XPath.match(Document.new(File.new(a)), "//benchmark_run").map {|r| \
+      {:flags => parse_flags(r.attributes['compile_str']), :binary_hash => r.attributes['binary_hash']} \
+    } 
+  rescue
+    []
+  end
+}.flatten
+
+####################################################################################################
+
+@gcc_runs = 0
+
+@useful = Set.new
+@useless = Set.new
+@recommended = Hash.new
+@uselessness = Hash.new
+@diffcount = Hash.new
+
+@samples = []
+@pairs = []
+
+def add_sample(b)
+  @samples.each do |a|
+    t, u = diff(a,b)
+
+    u.each do |k|
+      @diffcount[k] = 0 if not @diffcount.has_key?(k)
+      @diffcount[k] += 1
+    end
+
+    if a[:binary_hash] == b[:binary_hash]
+      u.each do |k|
+        @recommended[k] = 0 if not @recommended.has_key?(k)
+        @recommended[k] += 1
+
+        @uselessness[k] = 0 if not @uselessness.has_key?(k)
+        @uselessness[k] += 1
+      end
+    else
+      next if t.size > 0
+
+      u.each do |k|
+        @recommended[k] = 0 if not @recommended.has_key?(k)
+        @recommended[k] -= 1
+      end
+    
+      #next if t.size > 0
+      
+      @pairs.push([t,u,a,b])
+      update_pair(t,u)
+    end
+  end
+  @samples.push(b)
+end
+
+def update_pair(t,u)
+  return if t.size > 0
+  
+  if u.size == 0 then
+    $stderr.puts "EPIC FAIL!"
+  end
+  
+  if u.size == 1 then
+    add_useful(u.to_a[0])
+  end
+end
+
+def add_useful(k)
+  @useful.add(k)
+  @pairs.each do |t,u,a,b|
+    if u.delete?(k)
+      t.add(k)
+      update_pair(t,u)
+    end
+  end
+end
+
+def diff(a, b)
+  t = [].to_set
+  u = [].to_set
+  b[:flags].each do |k,v|
+    a[:flags][k] = "" if not a[:flags].has_key?(k)
+  end
+  a[:flags].each do |k,v|
+    b[:flags][k] = "" if not b[:flags].has_key?(k)
+    if b[:flags][k] != v
+      u.add(k) if not (@useful.member?(k))
+      t.add(k) if @useful.member?(k)
+    end
+  end
+  return [t,u]
+end
+
+def find_nearest
+  m = nil
+  l = nil
+  r = nil
+
+  @pairs.each do |t,u,a,b|
+    next if t.size > 0
+    if u.size > 0 and (m.nil? or u.size < m)
+      m = u.size
+      l = a
+      r = b
+    end
+  end
+
+  return [l, r]
+end
+
+def run(flags)
+  comp_str = flags.values.join(" ")
+  `mkdir -p "#{ENV['TEST_DIR']}/log/current/additional/"`
+  rand_name = (0...8).map{ ('a'..'z').to_a[rand(26)] }.join
+
+  begin
+  runner = TestRunner.new({
+     :compile_options => comp_str,
+     :generation_num => 0,
+     :population_num => 1,
+     :run_num => nil,
+     :do_profiling => false,
+     :greater_is_better => false,
+     :compile_only => true,
+     :xml_run_log => "#{ENV['TEST_DIR']}/log/current/additional/#{rand_name}.xml",
+     :reference_run => false
+   })
+  #rescue
+  end
+
+  new = {:flags => flags, :binary_hash => runner.hash}
+  add_sample(new)
+  @gcc_runs += 1
+end
+
+####################################################################################################
+
+init_samples.each do |s|
+  add_sample(s)
+end
+
+while true
+  a, b = find_nearest
+
+  break if a.nil?
+
+  t, uset = diff(a,b)
+  $stderr.puts "dist #{uset.size} | useful (#{@useful.size}): #{@useful.to_a.join(" ")}"
+  next if uset.size == 0
+
+  flgs = a[:flags].clone
+  u = uset.to_a
+  u.sort! {|a1,b1| @recommended[b1] <=> @recommended[a1]}
+  for i in 0..((u.size - 1) / 2)
+    flgs[u[i]] = b[:flags][u[i]]
+  end
+  run(flgs)
+end
+
+#puts "\nUSEFUL:"
+@useful.to_a.each do |k|
+  puts "USEFUL #{k}"
+end
+
+@samples.each do |a|
+  @samples.each do |b|
+    next if a.equal?(b)
+    if a[:binary_hash] == b[:binary_hash]
+      t,u = diff(a,b)
+      @useless.merge(u)
+      # @useless.add(u.to_a[0]) if u.size == 1
+    end
+  end
+end
+
+puts "\n"
+#puts "\nUSELESS:"
+@useless = @useless - @useful
+@useless.to_a.each do |k|
+  puts "USELESS #{k}"
+end
+
+puts "\n"
+#puts "\nUNKNOWN:"
+(@all_flags - @useless - @useful).to_a.each do |k|
+  puts "UNKNOWN #{k}"
+end
+
+puts "\ncompile strings with only useful and unknown options:"
+[init_samples[0]].each do |s|
+  puts s[:flags].values.join(" ")
+  puts s[:flags].reject {|k,v| @useless.member?(k)}.values.join(" ")
+end
+
+$stderr.puts "\nAdditional gcc runs: " + @gcc_runs.to_s

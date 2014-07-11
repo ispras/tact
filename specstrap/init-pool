@@ -1,0 +1,12 @@
+#!/bin/sh
+
+# POOL_DIR - path to pool
+# FLAGS - a list of flags
+rm -rf $POOL_DIR/run
+rm -rf $POOL_DIR/build
+mkdir -p $POOL_DIR/run 2> /dev/null
+mkdir -p $POOL_DIR/build 2> /dev/null
+
+cp -r $APP_DIR/src/* $POOL_DIR/build/ &&
+cd $POOL_DIR/build &&
+make -j17 && make install && cp -r $APP_DIR/data/test/* $POOL_DIR/run/

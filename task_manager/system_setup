@@ -1,0 +1,205 @@
+#!/usr/bin/ruby
+
+require 'optparse'
+require 'tree'
+require 'shellwords'
+require 'thread'
+require 'rexml/document'
+include REXML
+
+config_file = File.dirname(__FILE__) + "/system.xml"
+system = Document.new(File.new(config_file))
+
+$nfs_restart = XPath.first(system, "//nfs_restart").attributes['value']
+$address_range = XPath.first(system, "//address_range").attributes['value']
+$export_dir = XPath.first(system, "//nfs_export_dir").attributes['value']
+$tact_username = XPath.first(system, "//tact_username").attributes['value']
+$tact_password = XPath.first(system, "//tact_password").attributes['value']
+$main_server_id = XPath.first(system, "//main_server").attributes['id']
+$main_server_network_name = XPath.first(system, "//main_server").attributes['network_name']
+$current_username = ENV['USER']
+
+def escape(str)
+  return Shellwords.shellescape(str)
+end
+
+def export_nfs_dir
+  export_file = File.new("/etc/exports", 'r')
+  export_file.each { |line|
+  export_split = $export_dir.split("/")
+  
+    (2..export_split.size).each { |l|
+      if line.split[0] == export_split[0...l].join("/")
+        puts "Warning!!! Change the location of tact repository and fix it in system.xml file. This path is already exported by another user. Chack availability of directory in /etc/exports"
+        exit(1)
+      end
+    }
+  }
+  user_id = `id`
+  uid = user_id.split[0].scan(/uid=(\d*).*$/)[0][0]
+  gid = user_id.split[1].scan(/gid=(\d*).*$/)[0][0]
+  system("sudo sh -c \"echo #{$export_dir} #{$address_range}\\\(rw,async,no_subtree_check,all_squash,anonuid=#{uid},anongid=#{gid},insecure\\\) >> /etc/exports\"")
+  system("sudo #{$nfs_restart}")  
+end
+
+def tree_from_xml(system)
+  main_server = Tree::TreeNode.new($main_server_id, [$main_server_network_name]) 
+
+  current_level = [main_server]
+  
+  while ! current_level.empty?
+    current_level.each{ |treenode|
+      XPath.each(system, "//inter_server") do |inter|
+        inter_id = inter.attributes['id']
+        inter_network_name = inter.attributes['network_name']
+        inter_from = inter.attributes['connected_from']
+   
+        if inter_from == treenode.name
+          inter_node = Tree::TreeNode.new(inter_id, [inter_network_name])
+          treenode << inter_node
+        end
+      end
+
+      XPath.each(system, "//board") do |board|
+        board_id = board.attributes['id']
+        board_network_name = board.attributes['network_name']
+        board_from = board.attributes['connected_from']
+        board_os = board.attributes['os']
+      
+        if board_from == treenode.name
+          board_node = Tree::TreeNode.new(board_id, [board_network_name, board_os])
+          treenode << board_node
+        end
+      end
+    }
+    join_nodes = []
+    current_level.each { |node|
+     join_nodes += node.children
+    }
+    current_level = join_nodes
+  end
+
+  return main_server
+end
+
+def create_user(treenode)
+  node_name = treenode.name
+  board_os = ""
+  board_os = treenode.content[1] if treenode.is_leaf?
+  puts "enter sudoer username for #{node_name} or press enter if you are sudoer on #{node_name}" 
+  username = gets.chomp
+  username = $current_username if username == ""
+  sudo = "sudo"
+  if username == "root"
+    sudo = ""
+  end
+
+  ssh_command_base = ""
+  treenode.parentage.reverse[1..-1].each { |parent|
+    ssh_command_base += "ssh -At #{$tact_username}@#{parent.content[0]} "
+  }
+  ssh_command = ssh_command_base + "ssh -At #{username}@#{treenode.content[0]}"
+
+  if treenode.parent.is_root?
+    current_username = $current_username
+  else
+    current_username = $tact_username
+  end
+
+  board_command = ""
+  if board_os == "tizen"
+    board_command += "id #{$tact_username} ; if [ $? != 0 ] ; then #{sudo} adduser -D -s /bin/bash #{$tact_username} && echo #{$tact_username}:#{$tact_password} | #{sudo} chpasswd ; fi ; "
+  else
+     board_command += "id #{$tact_username} ; if [ $? != 0 ] ; then #{sudo} useradd -m -s /bin/bash #{$tact_username} && echo #{$tact_username}:#{$tact_password} | #{sudo} chpasswd ; fi ; "
+  end
+  board_command += "#{sudo} mkdir -p /home/#{$tact_username}/.ssh && "
+  board_command += "#{sudo} chown -hR #{$tact_username}:#{$tact_username} /home/#{$tact_username}/.ssh && "
+  board_command += "echo \"enter #{current_username}@#{treenode.parent.content[0]} password \" && #{sudo} sh -c \"scp #{current_username}@#{treenode.parent.content[0]}:/home/#{current_username}/.ssh/id_dsa.pub /home/#{$tact_username}/.ssh/id_dsa.pub_new\" && "
+  board_command += "#{sudo} sh -c  \" cat /home/#{$tact_username}/.ssh/id_dsa.pub_new >> /home/#{$tact_username}/.ssh/authorized_keys \" "
+  if board_os == "tizen"
+    board_command += " && if ! [ -e /bin/sudo ] ; then chmod a+s /bin/su && echo -e \"#!/bin/bash\nargs=\\\"\\\$@\\\"\nsu -c \\\"\\\$args\\\"\nexit \\\$? \" >> /bin/sudo && chmod a+x /bin/sudo ; fi "
+  else
+    board_command += " && #{sudo} usermod -a -G admin #{$tact_username} " if treenode.is_leaf?
+    board_command += " && #{sudo} sh -c \" echo \\\"#{$tact_username} ALL=(ALL) NOPASSWD: ALL\\\" >> /etc/sudoers \"" if treenode.is_leaf? 
+  end
+  
+  escape_board_command = board_command
+  (0...treenode.node_depth).each { |i|
+    escape_board_command = escape(escape_board_command) 
+  }
+  system("#{ssh_command_base} ping -c 1 -w 2 #{treenode.content[0]} ; if [ $? == 0 ] ; then #{ssh_command} #{escape_board_command} ; else echo \"Warning. #{treenode.content[0]} can't be pinged\" ; fi ")
+
+  if !treenode.is_leaf?
+    ssh_command = ssh_command_base + "ssh -At #{$tact_username}@#{treenode.content[0]}" 
+    puts ssh_command
+    system("#{ssh_command} \" if ! [ -e $HOME/.ssh/id_dsa ] ; then ssh-keygen -t dsa ; fi \"")
+  end
+
+end
+
+def create_mount_bind(treenode)
+  ssh_command_base = ""
+  treenode.parentage.reverse[1..-1].each { |parent|
+    ssh_command_base += "ssh -At #{$tact_username}@#{parent.content[0]} "
+  }
+  ssh_command = ssh_command_base + "ssh -At #{$tact_username}@#{treenode.content[0]} "
+
+  board_command = "sudo mkdir -p /mnt/tact && sudo mkdir -p /mnt/tact/#{ENV['USER']}_tact && "
+  if treenode.content[1] == "tizen"
+    board_command += "sudo \"echo \\\"#{$main_server_network_name}:#{$export_dir} /mnt/tact/#{$current_username}_tact nfs rw,nolock,noac,actimeo=1,rsize=1024,wsize=1024 0 0 \\\" >> /etc/fstab\" && "
+    board_command += "sudo mount /mnt/tact/#{$current_username}_tact && "
+  else
+    board_command += "if ! mount | grep /mnt/tact/#{$current_username}_tact > /dev/null ; then sudo mount #{$main_server_network_name}:#{$export_dir} /mnt/tact/#{$current_username}_tact ; fi && "
+  end
+  board_command += "mkdir -p /home/#{$tact_username}/nfs ; sudo mkdir -p /home/#{$tact_username}/nfs#{$export_dir} && "
+  ["bin" , "dev" , "etc" , "lib" , "opt" , "proc" , "sys" , "tmp" , "usr" , "var"].each { |dir|
+    board_command += "mkdir -p /home/#{$tact_username}/nfs/#{dir} ; if ! mount | grep /home/#{$tact_username}/nfs/#{dir} > /dev/null ; then sudo mount --bind /#{dir} /home/#{$tact_username}/nfs/#{dir} ; fi && "    
+  }
+  board_command += "if ! mount | grep /home/#{$tact_username}/nfs#{$export_dir} > /dev/null ; then sudo mount --bind /mnt/tact/#{$current_username}_tact /home/#{$tact_username}/nfs#{$export_dir} ; fi "
+ 
+  escape_board_command = board_command
+  (0...treenode.node_depth).each { |i|
+    escape_board_command = escape(escape_board_command) 
+  }
+  system("#{ssh_command_base} ping -c 1 -w 2 #{treenode.content[0]} ; if [ $? == 0 ] ; then #{ssh_command} #{escape_board_command} ; else echo \"Warning. #{treenode.content[0]} can't be pinged\" ; fi ")
+
+end
+
+$main_tree = tree_from_xml(system)
+$main_tree.print_tree
+
+export_nfs = false
+create_users = false
+create_mounts = false
+OptionParser.new do |opts|
+  opts.banner = "Usage: $0 [options]"
+
+  opts.on("--export_nfs", "export tact directory") do  
+    export_nfs = true
+  end
+
+  opts.on("--create_users", "Create tact users on every testboard") do  
+    create_users = true
+  end
+
+  opts.on("--create_mounts", "Create appropriate mounts on testboard ") do 
+    create_mounts = true
+  end
+
+end.parse!(ARGV)
+
+export_nfs_dir if export_nfs 
+
+current_level = $main_tree.children
+while ! current_level.empty?
+  join_nodes = []
+  current_level.each { |node|
+    join_nodes += node.children
+    create_user(node) if create_users
+    create_mount_bind(node) if node.is_leaf? and create_mounts
+  }
+  
+  current_level = join_nodes 
+end
+
+

@@ -1,0 +1,10 @@
+#!/bin/bash
+echo "TEST=spec"
+oldpwd=`pwd`
+cd $POOL_DIR/run/
+time -p $POOL_DIR/run/app_*  lendian.raw
+code=$?
+cd $oldpwd
+echo "HASH=`md5sum $POOL_DIR/run/vortex.out | awk '{ print $1 }'`"
+exit $code
+

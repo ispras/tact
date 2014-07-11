@@ -1,0 +1,97 @@
+#!/usr/bin/ruby
+
+require 'rexml/document'
+require 'set'
+require 'optparse'
+require File.expand_path(File.dirname(__FILE__)) + '/../lib/common.rb'
+require File.expand_path(File.dirname(__FILE__)) + '/../lib/FlagsParser.rb'
+include REXML
+include Math
+
+@profile = false
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: $0 [options]"
+  opts.on("--profile", "Do profiling") do
+    @profile = true
+  end
+end.parse!(ARGV)
+
+@init_samples = []
+@cachedir = "log/current/remove-bad-options-runs/"
+@initial_options = ARGV.join(" ")
+
+def run(flags, prefix="")
+
+  comp_str = flags_to_string(flags)
+  puts "CHECKING #{comp_str}"
+
+  `mkdir -p "#{@cachedir}"`
+  rand_name = prefix + (0...16).map{ ('a'..'z').to_a[rand(26)] }.join
+
+  good = true
+
+  begin
+  runner = TestRunner.new({
+     :compile_options => comp_str,
+     :generation_num => 0,
+     :population_num => 1,
+     :run_num => nil,
+     :do_profiling => @profile,
+     :greater_is_better => false,
+     :compile_only => true,
+     :xml_run_log => "#{@cachedir}/#{rand_name}.xml",
+     :reference_run => false,
+     :unfailing => true,
+     :repetitions => 3
+   })
+    if runner == nil or runner.hash == nil or runner.hash.size < 4
+      good = false
+    end
+  rescue SystemExit => e
+    good = false
+  end
+
+  puts "XML: #{@cachedir}/#{rand_name}.xml"
+  puts "SCORE: #{score}\n"
+
+  new = {:flags => flags, :file => "#{@cachedir}/#{rand_name}.xml", :good => good}
+
+  return new
+end
+
+@c = nil
+@flag = nil
+@order1 = @order.clone
+
+def reduce(a, b)
+  d = diff(a, b).to_a
+  if d.size > 0
+    d.sort! {|a1,b1| @order1[b1] <=> @order1[a1]}
+
+    cs = []
+
+    d.each do |f|
+      @flag = f
+      cf = a[:flags].clone
+      cf[f] = b[:flags][f]
+      @c = run(cf)
+      
+      cs.push(@c)
+
+      break if @c[:good]
+    end
+
+    c = cs.min {|a1,b1| a1[:score] <=> b1[:score] }
+
+    puts "WIN #{c[:score]}  #{flags_to_string(c[:flags])}"
+
+    # incorrect flag in the output!
+    # puts "#{a[:flags][@flag]}\t\t#{a[:score] - c[:score]}"
+    # reduce(c, b)
+  end
+end
+
+@init_samples.push(run(string_to_flags(@initial_options)))
+@init_samples.push({:flags => {}, :good => true})
+reduce(@init_samples[0], @init_samples[1])

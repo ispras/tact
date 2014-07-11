@@ -1,0 +1,24 @@
+# Set PATH according to $0 and current work dir.
+
+# First, check whether this script is in PATH
+WD=`pwd`
+cd `dirname $0`
+bin_dir=`pwd`
+to_export="$bin_dir"
+cd ..
+base_dir=`pwd`
+cd $WD
+
+if ! echo $PATH | grep $bin_dir >/dev/null; then
+  # On targets, also add target/ARCH/bin to PATH
+  target="$base_dir/target/`uname -m`"
+  if [ -d "$target" ]; then
+    to_export="$target/bin:$to_export"
+  fi
+
+  echo export PATH="$to_export:$PATH"
+fi
+
+if [ "x$TACT_DIR" == "x" ]; then
+  echo export TACT_DIR=$base_dir
+fi

@@ -1,0 +1,64 @@
+#!/usr/bin/ruby -w
+
+require 'rexml/document'
+require 'ftools'
+include REXML
+
+if ARGV.size < 1
+  puts "No directory name parameter given."
+  exit 1
+end
+
+if !ENV.has_key?('TEST_DIR')
+  puts "TEST_DIR should be set."
+  exit 1
+end
+
+folder = ARGV[0].to_s
+score_attr = ''
+greater_is_better = false
+
+# Get tuning metrics
+metrics = `get_conf_value --param measure --xml $TEST_DIR/etc/tuning.conf`.chomp
+case metrics
+when "performance"
+  score_attr = 'score'
+when "size"
+  score_attr = 'binary_size'
+end
+
+# Process test_descr.xml
+test_descr = Document.new(File.new(ENV['TEST_DIR']+"/etc/test-descr.xml"))
+case XPath.first(test_descr, "//benchmark_description").attributes['greater_is_better']
+when "true"
+  greater_is_better = true
+when "false"
+  greater_is_better = false
+end
+
+runs = Array.new
+
+dir = Dir.new(folder + "/runs")
+dir.entries.each do |filename|
+  matches = filename.match(/res-(\d{3})-(\d{2})-(\d{3})\.xml/)
+  if matches
+    begin
+      cur = Hash.new
+      cur[:filename] = dir.path + "/" + filename
+      bench_run = Document.new(File.new(cur[:filename]))
+      cur[:score] = XPath.first(bench_run, "/benchmark_run").attributes[score_attr].to_f
+      runs.push(cur)
+    rescue
+      next
+    end
+  end
+end
+
+runs.sort! { |a, b| greater_is_better ? b[:score] <=> a[:score] : a[:score] <=> b[:score] }
+
+# Copy files
+n = 1
+runs[0..4].each do |v|
+  File.syscopy(v[:filename], "#{folder}/best/#{n}.xml")
+  n += 1
+end

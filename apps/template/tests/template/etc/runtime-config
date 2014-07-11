@@ -1,0 +1,17 @@
+# Runtime configuration
+
+NUM_GENERATIONS=30
+NUM_POPULATIONS=2
+POPULATION_SIZE=200
+MUTATION_RATE=0.03
+#  DO_PROFILING=yes
+#  RANDOM_SEED=4288551635
+#  AUX_OPTIONS="-no-scaling"
+
+# The number of pools used is equal to $NUM_TESTBOARDS * $THREADS_PER_TESTBOARD
+THREADS_PER_TESTBOARD=2
+NUM_TESTBOARDS=1
+
+# How many times run a test suite
+REPETITIONS=3
+

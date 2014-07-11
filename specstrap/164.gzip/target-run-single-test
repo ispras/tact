@@ -1,0 +1,11 @@
+#!/bin/bash
+echo "TEST=spec"
+oldpwd=`pwd`
+cd $POOL_DIR/run/
+time -p $POOL_DIR/run/app_* > $POOL_DIR/run/gzip.out
+code=$?
+cd $oldpwd
+echo "HASH="`md5sum $POOL_DIR/run/gzip.out | awk '{ print $1 }'`
+rm $POOL_DIR/run/gzip.out
+exit $code
+

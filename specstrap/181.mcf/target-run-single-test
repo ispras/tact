@@ -1,0 +1,7 @@
+#!/bin/bash
+echo "TEST=spec"
+oldpwd=`pwd`
+cd $POOL_DIR/run/ 
+time -p $POOL_DIR/run/app_*
+cd $oldpwd 
+echo "HASH=123"

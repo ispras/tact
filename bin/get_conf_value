@@ -1,0 +1,90 @@
+#!/usr/bin/ruby
+
+require 'optparse'
+require 'rexml/document'
+include REXML
+
+test_dir=Dir.getwd
+# TODO: assert that we're running within test directory
+if (test_dir[/^\/.+\/tests\/([^\/]+)$/] == nil)
+	if !ENV.has_key?('TACT_DIR') || !ENV.has_key?('TEST_DIR') || !ENV.has_key?('APP_DIR')
+		puts 'error: TACT_DIR, TEST_DIR and APP_DIR environment variables should be set'
+		puts 'in case to run not from TEST_DIR'
+		exit 2
+	else
+		test_dir = ENV['TEST_DIR']
+	end
+end
+
+
+parameter = nil
+
+path = nil
+OptionParser.new do |opts|
+  opts.banner = "Usage: $0 [options]"
+
+  opts.on("--param PARAMETER", "Get PARAMETER value from config") do |param|
+    parameter = param
+  end
+
+  opts.on("--xml PARAMETR", "GET path PARAMETR from config") do |xml1|
+    path = xml1
+  end
+
+end.parse!(ARGV)
+
+if parameter == nil
+	exit 3
+end
+
+root_name = 'config'
+if path == nil
+  path = test_dir + '/etc/tuning.conf'
+end 
+
+if !File.exist?(path) then
+	path = test_dir + "/../../../template/tests/template/etc/tuning.conf"
+	if !File.exist?(path) then
+		$stderr.puts("Error: tuning.conf not found!")
+		exit(2)
+	end
+	$stderr.puts("!!! WARNING !!!: You are using default tuning.conf !!!")
+end
+
+xmlconf = Document.new(File.new(path))
+value = ""
+values = []
+
+case parameter
+when "prime"
+	xmlconf.elements.each("#{root_name}/#{parameter}"){
+		|e| value += e.attributes["flags"]
+	}
+when "baseline"
+	xmlconf.elements.each("#{root_name}/#{parameter}"){
+		|e| values.push("#{e.attributes["flags"]}")
+	}
+when "baselinesnum"
+	xmlconf.elements.each("#{root_name}/baseline"){
+		|e| values.push("#{e.attributes["flags"]}")
+	}
+else
+	xmlconf.elements.each("#{root_name}/#{parameter}"){
+		|e| value += e.attributes["value"]
+	}
+end
+
+if parameter == "baseline" && values.size > 0
+	value = values.join(",")
+	#puts "[DEBUG] value = #{value}"
+end
+
+if parameter == "baselinesnum"
+	value = values.size
+end
+
+if value == ""
+	exit 4
+end
+
+puts value

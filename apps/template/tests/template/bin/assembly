@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# assembly > code.s
+# POOL_DIR - path to pool
+# FLAGS - a list of flags
+
+# This script should produce assembly code for those parts that are
+# important for this test and print it to stdout
