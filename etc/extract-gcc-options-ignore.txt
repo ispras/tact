@@ -170,7 +170,7 @@ fpack-struct=
 # Return small aggregates in memory, not registers.
 fpcc-struct-return
 
-# Unable to parse option automatically (but they presents in template ***REMOVED***.conf)
+# Unable to parse option automatically (but they presents in template tuning.conf)
 falign-functions
 falign-functions=
 falign-jumps
