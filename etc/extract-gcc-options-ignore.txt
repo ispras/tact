@@ -1,0 +1,198 @@
+# Do not generate any bounds checks
+fcheck-data-deps
+fbounds-check
+fstack-check=
+fstack-check
+fstack-limit
+fstack-limit-register=
+fstack-limit-symbol=
+fstack-protector
+fstack-protector-all
+fstrict-aliasing
+fstrict-overflow
+ftrapv
+fwrapv
+fstrict-volatile-bitfields
+
+# mudflap bounds-checking instrumentation for single- and multi-threaded programs
+fmudflap
+fmudflapth
+fmudflapir
+
+# We should specify a register in order for these to work
+fcall-saved-
+fcall-used-
+ffixed-
+
+# Don't really care about complex number operations
+fcx-limited-range
+fcx-fortran-rules
+
+# Debug options
+fcompare-debug=
+fcompare-debug-second
+fdbg-cnt-list
+fdbg-cnt=
+fdebug-prefix-map=
+fdiagnostics-show-location=
+fdiagnostics-show-option
+fdump-
+fdump-final-insns=
+fdump-noaddr
+fdump-unnumbered
+fdump-unnumbered-links
+fdwarf2-cfi-asm
+feliminate-dwarf2-dups
+feliminate-unused-debug-symbols
+feliminate-unused-debug-types
+femit-class-debug-always
+fenable-icf-debug
+fira-verbose=
+fmessage-length=
+fsched-verbose=
+ftree-vectorizer-verbose=
+fverbose-asm
+fshow-column
+fvar-tracking
+fvar-tracking-assignments
+fvar-tracking-assignments-toggle
+fvar-tracking-uninit
+
+# Does nothing. Preserved for backward compatibility (that's what comments in common.opt says).
+fargument-alias
+fargument-noalias
+fargument-noalias-global
+fargument-noalias-anything
+fcse-skip-blocks
+fforce-addr
+floop-optimize
+frerun-loop-opt
+fsched2-use-traces
+fsee
+fstrength-reduce
+ftree-store-ccp
+ftree-store-copy-prop
+ftree-salias
+
+# Same as fregmove
+foptimize-register-move
+
+# Graphite is still under development.
+fgraphite
+fgraphite-identity
+
+# Profiling options
+finstrument-functions
+finstrument-functions-exclude-function-list=
+finstrument-functions-exclude-file-list=
+fprofile
+fbranch-probabilities
+fprofile-arcs
+fprofile-dir=
+fprofile-correction
+fprofile-generate
+fprofile-generate=
+fprofile-use
+fprofile-use=
+fprofile-values
+ftest-coverage
+fipa-profile
+# Use expression value profiles in optimizations
+fvpt
+
+# I don't see how these can affect performance
+
+# Make compile reproducible using seed
+frandom-seed
+frandom-seed=
+# Emit static const variables even if they are not used
+fkeep-static-consts
+# Set errno after built-in math functions
+fmath-errno
+# Report on permanent memory allocation
+fmem-report
+# Report on memory allocation before interprocedural optimization
+fpre-ipa-mem-report
+# Report on memory allocation after interprocedural optimization
+fpost-ipa-mem-report
+# Report the time taken by each compiler pass
+ftime-report
+# Give external symbols a leading underscore
+fleading-underscore
+# Attempt to merge identical debug strings across compilation units
+fmerge-debug-strings
+# Record gcc command line switches in the object file.
+frecord-gcc-switches
+# Check for syntax errors, then stop
+fsyntax-only
+# Set the default symbol visibility
+fvisibility=
+# Put zero initialized data in the bss section
+fzero-initialized-in-bss
+# Generate code for functions even if they are fully inlined
+fkeep-inline-functions
+# Process #ident directives
+fident
+# Do not generate .size directives
+finhibit-size-directive
+# Reorder top level functions, variables, and asms
+ftoplevel-reorder
+# Delete useless null pointer checks
+fdelete-null-pointer-checks
+# When possible do not generate stack frames (enabled by default) 
+fomit-frame-pointer
+
+# Generation of position-independent code: should be determined by ABI, not by the programmer's free will
+# (???)
+fPIC
+fPIE
+fpic
+fpie
+
+# Thread-specific options
+ftls-model=
+ftree-parallelize-loops=
+
+# These options is a workaround, we don't need them
+fhelp
+fhelp=
+ftarget-help
+fversion
+fplugin=
+fplugin-arg-
+
+# Cause miscompile if shared libs compiled without the option
+fabi-version=
+fpack-struct
+fpack-struct=
+
+# Is a default, alternative is freg-struct-return.
+# Return small aggregates in memory, not registers.
+fpcc-struct-return
+
+# Unable to parse option automatically (but they present in template tuning.conf)
+falign-functions
+falign-functions=
+falign-jumps
+falign-jumps=
+falign-labels
+falign-labels=
+falign-loops
+falign-loops=
+fira-algorithm=
+fira-region=
+fexcess-precision=
+
+# Link time optimizations
+flto-compression-level=
+flto-report
+flto
+funit-at-a-time
+fwhole-program
+fwhopr
+fwhopr=
+fuse-linker-plugin
+
+# We can use --param max-inline-insns-... instead
+finline-limit-
+finline-limit=
