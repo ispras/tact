@@ -1,0 +1,124 @@
+#!/usr/bin/ruby
+
+$bogus_score = 1e9
+
+require 'set'
+require 'optparse'
+
+cmdline_options = { }
+
+
+opts = OptionParser.new do |opts|
+  opts.banner = "Usage: process_log [options]\n"
+#                "This script generates configure file which contains information about tuning options."
+                        
+  opts.on_tail("-i", "--ignore-fails", "Failed runs (with penalty scores $bogus_score) do not participate in statistics") do
+    cmdline_options[:ignore_fails] = true
+  end
+  opts.on_tail("-p", "--population N", Integer, "Show statistics only for population N") do |n|
+    cmdline_options[:population] = n
+  end
+end
+
+opts.parse!(ARGV)
+
+class Option
+  attr_accessor :name, :num_encountered, :total_score, :positions_sum
+
+  def average_score
+    return (@num_encountered > 0)?(@total_score.to_f / @num_encountered):0
+  end
+  
+  def average_position
+    return (@num_encountered > 0)?(@positions_sum.to_f / @num_encountered):0
+  end
+
+  def error_rate
+    if @num_encountered > 0
+      return sprintf("%12.2f",@errs.to_f / @num_encountered)
+    else
+      return "#{@errs} times"
+    end
+
+    num = 1 if num == 0
+    return @errs.to_f / num
+  end
+  
+  def encounter(score, pos)
+    if score != ""
+    	@num_encountered += 1
+    	@total_score += score
+        @positions_sum += pos
+    else
+    	@errs += 1
+    end
+  end
+  
+  def initialize(name)
+    @name = name
+    @num_encountered = 0
+    @total_score = 0
+    @positions_sum = 0
+    @errs = 0
+  end
+  
+  
+end
+
+options=Hash.new
+
+log=Array.new
+
+readlines.each do |s|
+#  puts s
+  s.match(/([\d\.]*)\s*\(?([\d\.]*)\)?\s*([\d\.]+)\s+([\d\.]*)\s+'\s*(.*)\s*'$/)
+  score = $1
+  score = $2 if $1.nil? or $1.empty?
+  generation=$3.to_i
+  population=$4.to_i
+  options_set=Set.new($5.split(' '))
+
+  # $1 is empty if error or compile_only
+  # $2 is empty if error or measured by performance
+  # final score is $1 or $2 (if $1 empty)
+  # if final score empty - it's error run
+  
+  score = score.to_f if !score.empty?  
+
+  if cmdline_options[:population] && cmdline_options[:population] != population
+    next
+  end
+  
+  if !cmdline_options[:ignore_fails] || !score.empty?
+    log.push([score, options_set])
+  end
+end
+
+pos = 0
+
+#f = File.new("test.log", "w")
+# Pos is incremented in the order of appearance, greater average pos means
+# this option appeared more frequently at the end of evolution
+log.each do |rec|
+  score=rec[0]
+#  f.puts("#{rec[0]}\t' " + rec[1].join(" ") + " '")
+  str_options=rec[1]
+  str_options.each do |o|
+    if !options.has_key?(o)
+      options[o] = Option.new(o)
+    end
+    options[o].encounter(score, pos)
+  end
+  pos += 1
+end
+#f.close
+
+#  sorted_options = options.values.sort { |a, b| a.average_s <=> b.average_position }
+
+
+sorted_options = options.values.sort { |a, b| a.average_score <=> b.average_score }
+printf("%12s  %12s  %12s  %40s  %10s  %12s\n", 'avg pos', 'avg score', 'error rate', 'option', 'good runs', 'total score')
+
+sorted_options.each do |opt|
+  printf("%12.2f  %12.2f  %12s  %40s  %10d  %12.2f\n", opt.average_position, opt.average_score, opt.error_rate, opt.name, opt.num_encountered, opt.total_score)
+end
