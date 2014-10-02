@@ -1,0 +1,9 @@
+This directory contains scripts that should be implemented by any test because
+they will be run by TACT.
+
+These scripts are intended to be common for all tests for one application.
+You can override some of these scripts in tests/my-test/bin (same as $TEST_DIR/bin)
+
+Every script can use two environment variables: TEST_DIR and APP_DIR
+For example thhis readme file is in $APP_DIR/bin
+($APP_DIR is somenthing like a reference to a base class and $TEST_DIR corresponds to 'this')
