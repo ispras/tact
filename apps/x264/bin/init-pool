@@ -1,0 +1,17 @@
+#!/bin/sh
+
+# rebuild-pool
+# POOL_DIR - path to pool
+# FLAGS - a list of flags
+mkdir $POOL_DIR/run 2> /dev/null
+mkdir $POOL_DIR/build 2> /dev/null
+
+export CFLAGS=" -O2  -I/run/include   -Wall -I. -std=gnu99 -s "
+cp -r $APP_DIR/src/x264/* $POOL_DIR/build &&
+cd $POOL_DIR/build &&
+./configure --prefix=$POOL_DIR/run --disable-asm &&
+echo > .depend 
+make -j17 && make install
+
+
+                                                            

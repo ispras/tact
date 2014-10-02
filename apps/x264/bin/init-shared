@@ -1,0 +1,3 @@
+#!/bin/sh
+# do nothing
+echo "No shared libraries needed for this application."

@@ -1,0 +1,14 @@
+#!/bin/sh
+
+# rebuild-pool
+# POOL_DIR - path to pool
+# FLAGS - a list of flags
+
+rm -r $POOL_DIR/run/* 2> /dev/null
+export CFLAGS=" -Wall -I. -std=gnu99 -s $FLAGS "
+
+cd $POOL_DIR/build
+make clean &&
+  echo > .depend &&
+  make $MAKE_FLAGS &&
+  make install

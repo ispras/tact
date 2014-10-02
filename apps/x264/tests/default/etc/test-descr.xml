@@ -1,0 +1,8 @@
+<benchmark_description
+    summary_method="weighted_geomean"
+    greater_is_better="false">
+
+    <test name="suzie" weight="1"/>
+    <test name="foreman" weight="1"/>
+
+</benchmark_description>

@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# target-run-single-test > single-test-results
+# POOL_DIR - path to pool
+# TEST_NAME - name of the test
+
+# This script should run the test $TEST_NAME using the executables from $POOL_DIR/run
+
+echo "TEST=$TEST_NAME"
+
+time -p $POOL_DIR/run/bin/x264  --quiet -o "$POOL_DIR/run/$TEST_NAME.mkv" --input-res 176x144 "$APP_DIR/src/tests/${TEST_NAME}_qcif.yuv"
+
+echo "HASH=`md5sum $POOL_DIR/run/$TEST_NAME.mkv | awk '{print $1}'`"
