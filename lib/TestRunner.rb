@@ -301,11 +301,7 @@ class TestRunner
     end
 
     $stderr.flush
-    if @current_testboard != "localhost"
-        run_system("#{ENV["TACT_DIR"]}/task_manager/runb --board_id #{@current_testboard} --command \"sudo chroot nfs #{@work_dir}/board_run\" >#{@work_dir}/log/run.log 2>&1")
-    else
-        run_system("#{ENV["TACT_DIR"]}/task_manager/runb --board_id #{@current_testboard} --command \"#{@work_dir}/board_run\" >#{@work_dir}/log/run.log 2>&1")
-    end
+    run_system("#{ENV["TACT_DIR"]}/task_manager/runb --board_id #{@current_testboard} --command \"#{@work_dir}/board_run\" >#{@work_dir}/log/run.log 2>&1")
  
     @log.print("Run finished.")
     output_msg("Run finished.")

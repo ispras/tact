@@ -1,62 +1,50 @@
 <?xml version="1.0"?>
 <system_config>
   <main_server
-	network_name="server"
-	id="server"
-  />
-  <inter_server
-        connected_from="server"
-        network_name="server_1"
-        id="server_1"
+    network_name="server"
+    id="server"
   />
 
-   <inter_server
-        connected_from="server"
-        network_name="server_2"
-        id="server_2"
+  <inter_server
+    connected_from="server"
+    network_name="server_1"
+    id="server_1"
   />
-<board
+
+  <inter_server
+    connected_from="server"
+    network_name="server_2"
+    id="server_2"
+  />
+
+  <board
     id="odroid"
     connected_from="server"
-    network_name="odroid"
+    network_name="set_network_name_here"
     os="ubuntu"
-    />
-<board
+  />
+
+  <board
     id="odroid1"
     connected_from="server_1"
-    network_name="odroid1"
+    network_name="set_network_name_here"
     os="ubuntu"
-    />
+  />
 
-<board
+  <board
     id="localhost"
     connected_from="server"
     network_name="localhost"
     os="ubuntu"
-    />
+  />
     
-<board_class
+  <board_class
     class_name="cortex-A8">
   
-    <board1
-      id="odroid"
-    />
+    <board1 id="odroid" />
+    <board1 id="odroid1" />
+  </board_class>
 
-    <board1
-      id="odroid1"
-    />
-</board_class>
+  <tact_username value="tact"/>
 
-  <tact_username
-    value="tact"/>
-  <tact_password
-    value="tact"/>
-  <nfs_export_dir
-    value="/var/tact/" />    
-  <!-- enter address range for intermediate hosts.-->  
-  <address_range
-    value="10.0.0.0/24" />
-  <!-- in case of ubuntu -->
-  <nfs_restart 
-    value="service nfs-kernel-server restart" />
 </system_config>
