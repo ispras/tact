@@ -26,7 +26,7 @@ do
 	cp $TACT_DIR/specstrap/test-descr.xml $TACT_DIR/apps/$app/tests/default/etc/
 
 	cp -r $SPEC_DIR/benchspec/CINT2000/$app/src $TACT_DIR/apps/$app/
-	cp $TACT_DIR/specstrap/Makefile.defaults $TACT_DIR/apps/$app/tests/default/
+	cp $SPEC_DIR/benchspec/Makefile.defaults $TACT_DIR/apps/$app/tests/default/
 	cp -r $SPEC_DIR/benchspec/CINT2000/$app/data/ $TACT_DIR/apps/$app/
 
 	cp $TACT_DIR/specstrap/verify-results $TACT_DIR/apps/$app/bin/

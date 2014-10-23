@@ -1,0 +1,9 @@
+This folder contains scripts that import SPECINT 2000 tests into TACT.
+
+How to import:
+
+1. Configure TACT environment by `bin/set-env`
+2. Export SPEC_DIR environment variable as path to your SPEC dir. e.g. /home/username/spec2k
+3. Run script 'run.sh'
+4. Now you may find spec2k tests in 'tact/apps' dir.
+
