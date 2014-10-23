@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# init-pool
+# POOL_DIR - path to pool
+# TEST_DIR - path to test dir
+# FLAGS - compiler flags
+
+mkdir $POOL_DIR/run 2> /dev/null
+
+$TEST_DIR/src/sum_squares.sh $FLAGS > $POOL_DIR/run/sum_squares

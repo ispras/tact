@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# rebuild-pool
+# POOL_DIR - path to pool
+# FLAGS - a list of flags
+
+# remove 'binary'
+rm $POOL_DIR/run/sum_squares
+
+# build new 'binary' with given $FLAGS
+$TEST_DIR/src/sum_squares.sh $FLAGS > $POOL_DIR/run/sum_squares

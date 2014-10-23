@@ -9,8 +9,8 @@ class AppResultsParser < ResultsParserBase
              # When encountering the first line of the output of new test, switch test number
              note_next_test
                         
-             # in tutorial we have only one test name, so set it to 'tutorial'
-             set_current_test_name("new")
+             # in um_squares we have only one test, so set its name to 'sum'
+             set_current_test_name("sum")
                                     
              # first matched value it's result of test
              res = matches[1]

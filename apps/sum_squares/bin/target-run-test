@@ -12,8 +12,6 @@
 
 exit_code=0
 
-REPETITIONS=1
-
 for i in `seq $REPETITIONS`; do
     echo "REPETITION=$i"
 

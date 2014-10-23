@@ -6,4 +6,4 @@
 # This script should print out a single binary hash for test binaries, e.g. md5sum of .so file of the library
 # under optimization
 
-md5sum $POOL_DIR/run/new | awk '{ print $1 }'
+md5sum $POOL_DIR/run/sum_squares | awk '{ print $1 }'

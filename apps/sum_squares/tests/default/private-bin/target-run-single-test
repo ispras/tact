@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# target-run-single-test > single-test-results
+# POOL_DIR - path to pool
+
+# This script should run the test using the executables from $POOL_DIR/run
+
+echo "This is run of sum_squares"
+
+cat $POOL_DIR/run/sum_squares
+
+# This is simple application which cannot fail.
+echo "HASH=123"
