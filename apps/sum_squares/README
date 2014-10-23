@@ -1,0 +1,4 @@
+This is a simple test application that shows some interesting cases of TACT usage.
+This application doesn't use any compiler. It contains only shell scripts that emulates 
+the process of compilation and running. Also sum_squares uses floating point parameters.
+
