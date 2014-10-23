@@ -7,4 +7,4 @@
 # This script should rebuild those parts of code that are
 # important for this test
 
-/usr/bin/gcc $FLAGS $TEST_DIR/src/main.c -o $POOL_DIR/a.out
+$CC $FLAGS $TEST_DIR/src/main.c -o $POOL_DIR/a.out

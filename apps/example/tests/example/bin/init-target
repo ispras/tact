@@ -3,3 +3,5 @@
 # init-target
 # This script initializes a board.
 # For example it can create a ramdisk and copy some files there.
+
+# Nothing to do here
