@@ -7,5 +7,9 @@ if [ -e $APP_DIR/private-etc/build-config ]; then
 	. $APP_DIR/private-etc/build-config
 fi
 
-echo `md5sum $CC` "(" `$CC --version | head -n 1` ")"
+if [ "x$CC" != "x" ]; then
+	echo `md5sum $CC` "(" `$CC --version | head -n 1` ")"
+else
+	echo "No compiler"
+fi
 

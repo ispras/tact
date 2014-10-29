@@ -30,7 +30,7 @@ set terminal postscript solid color eps enhanced
 set output "#{dir}/result.ps"
 set xlabel "Performance (points)"
 set ylabel "Size (bytes)"
-set size ratio -1
+set size ratio 1
 set format y "%.0f"
 #set xtics 2
 EOF

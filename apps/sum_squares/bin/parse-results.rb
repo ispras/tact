@@ -4,7 +4,7 @@ class AppResultsParser < ResultsParserBase
 
     def user_handle_single_line(line)
           # Extract test value and begin new test
-          matches = line.match(/^(-?\d*\.\d+)/)
+          matches = line.match(/^RESULT=(-?\d*\.\d+)/)
           if matches && matches.length == 2
              # When encountering the first line of the output of new test, switch test number
              note_next_test
@@ -14,7 +14,7 @@ class AppResultsParser < ResultsParserBase
                                     
              # first matched value it's result of test
              res = matches[1]
-             store_current_value('value', res)
+             store_current_value('value', res) if !res.nil?
           end
      end
                                  

@@ -99,7 +99,7 @@ class TestRunner
       else
         do_run(1) if not params[:compile_only]
       end
-      
+
       analyze_size if @measure == "size" || @measure == "pareto"
       analyze_results
 	

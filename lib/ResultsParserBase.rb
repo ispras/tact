@@ -83,6 +83,8 @@ class ResultsParserBase
 	  @input = File.open(file, 'r')
 	end
 
+	@current_test_data = Hash.new
+
 	@compile_only = params[:compile_only]
 	
 	@xmldata = Document.new
@@ -115,9 +117,9 @@ class ResultsParserBase
 	if @current_test_num > 0
 	  store_current_test_data
 	end
-        
+
         @benchmark_run.attributes["compiler"] = `compiler-version`.strip
-	
+
 	# Output XML file
 	@xmldata.write(out_file, 2)
 	return @xmldata

@@ -11,8 +11,10 @@ result=$(echo "scale=$float_scale; $*" | bc -q 2>/dev/null)
 stat=$?
 if [[ $stat -eq 0  &&  -z "$result" ]]; then stat=1; fi
 fi
-echo $result
+echo "RESULT=$result"
 return $stat
 }
+
+echo $2*1000 | bc -q 2>/dev/null
 
 float_eval "($2 - 8.15)*($2 - 8.15) + ($4 - 3.83)*($4 - 3.83) + ($6 - 9.99)*($6 - 9.99)"

@@ -309,6 +309,7 @@ class ParetoPopulation < Population
     @archive = []
     @pareto_best = []
     @tuning_process = true
+    @coefficient = 1
   end
 
   def sort_archive_by_performance(archive_original)
@@ -330,6 +331,9 @@ class ParetoPopulation < Population
 
   def create_archive_log(archive)
     if @tuning_process
+      if !File::directory?("#{@log_dir}/archives/") then
+        Dir::mkdir("#{@log_dir}/archives/")
+      end
       @archive_folder = "#{@log_dir}/archives/generation#{@generation}_#{@number}"
       @pareto_front_folder = "#{@log_dir}/archives/generation#{@generation}_#{@number}/Pareto-front"
       @pareto_best_front_folder = "#{@log_dir}/archives/generation#{@generation}_#{@number}/Pareto-best-front"
@@ -528,9 +532,9 @@ class ParetoPopulation < Population
   end
 
   def euclidean_distance(entity1, entity2, size_is_greater)
-    return 0 if @coefficient.nan?
-    perf_diff = (entity1.performance_score - entity2.performance_score).abs
-    size_diff = (entity1.binary_size - entity2.binary_size).abs
+    @coefficient = 1 if @coefficient.nil?
+    perf_diff = (entity1.performance_score - entity2.performance_score)
+    size_diff = (entity1.binary_size - entity2.binary_size)
     if size_is_greater
       dist = Math.sqrt((@coefficent*perf_diff)**2 + size_diff**2).to_i
     else
@@ -541,7 +545,7 @@ class ParetoPopulation < Population
   end
  
   def euclidean_distance1(entity, pair, size_is_greater)
-    return 0 if @coefficient.nan?
+    @coefficient = 1 if @coefficient.nil?
     perf_diff = (entity.performance_score - pair[0]).abs
     size_diff = (entity.binary_size - pair[1]).abs
     if size_is_greater

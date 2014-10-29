@@ -5,4 +5,4 @@
 
 # This script should print out a size of one binary/library file
 
-size "$1/run/sum_squares" | tail -n 1 | awk '{print $1}'
+cat "$1/run/sum_squares" | head -n 1 | awk '{print $1}'
