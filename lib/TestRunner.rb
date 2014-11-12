@@ -285,7 +285,7 @@ class TestRunner
     file.puts("echo BEGIN_RUN")
     file.puts("cd #{@work_dir}")
     # FIXME: Add wrapper for timeout, and return time -p here
-    file.puts("sh -c #{ENV["TEST_DIR"]}/bin/target-run-test ; c=$? ; echo END_RUN ; if [ $? == 0 ] ; then echo OVERALL_STATUS=OK ; else echo OVERALL_STATUS=ERROR ; fi")
+    file.puts("sh -c #{ENV["TEST_DIR"]}/bin/target-run-test ; c=$? ; echo END_RUN ; if [ $с == 0 ] ; then echo OVERALL_STATUS=OK ; else echo OVERALL_STATUS=ERROR ; fi")
     file.puts("echo -n '=== Finish (test board time): ' &&  date")
     file.puts("pgid=`ps -ejH | grep -m 1 $pid | awk '{ print $2 }'` && (flock 105 ; kill -9 -$pgid) 105>1.lock") if @timeout > 0
     file.close
