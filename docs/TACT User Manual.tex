@@ -1,0 +1,1168 @@
+% Preview source code
+
+% Enable copy+paste from the output pdf file.
+% See e.g. http://tex.stackexchange.com/questions/72900/cant-copy-paste-from-my-pdf-any-idea-why
+\RequirePackage{cmap}
+
+% It's also strongly recommended to 'apt-get install cm-super' prior to compiling to pdf to get beautiful vector fonts embedded.
+
+%% LyX 1.6.5 created this file.  For more info, see http://www.lyx.org/.
+%% Do not edit unless you really know what you are doing.
+\documentclass[onecolumn,english,envcountsame,envcountchap]{svmono-mod}
+\usepackage[T1]{fontenc}
+\usepackage[latin9]{inputenc}
+\usepackage{ifthen}
+\usepackage{makeidx}
+\usepackage{listings}
+\usepackage{comment}
+\usepackage{textcomp}
+\usepackage{color}
+\usepackage[normalem]{ulem}
+\definecolor{lightgray}{rgb}{0.95,0.95,0.95}
+\lstset{ %
+basicstyle=\small\ttfamily,       % the size of the fonts that are used for the code
+numbers=none,                   % where to put the line-numbers
+backgroundcolor=\color{lightgray},  % choose the background color. You must add \usepackage{color}
+showspaces=false,               % show spaces adding particular underscores
+showstringspaces=false,         % underline spaces within strings
+showtabs=false,                 % show tabs within strings adding particular underscores
+frame=single,	                % adds a frame around the code
+tabsize=2,	                % sets default tabsize to 2 spaces
+captionpos=b,                   % sets the caption-position to bottom
+breaklines=true,                % sets automatic line breaking
+breakatwhitespace=true,        % sets if automatic breaks should only happen at whitespace
+columns=flexible,
+float
+}
+\makeindex
+
+\makeatletter
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% LyX specific LaTeX commands.
+%% Because html converters don't know tabularnewline
+\providecommand{\tabularnewline}{\\}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Textclass specific LaTeX commands.
+ 
+\newcommand{\svmultpreface}[1]{\ifthenelse{\equal{#1}{}}{\preface}{\preface[#1]}
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% User specified LaTeX commands.
+%%%%%%%%%%%%%%%%%%%% book.tex %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% sample root file for the chapters of your "monograph"
+%
+% Use this file as a template for your own input.
+%
+%%%%%%%%%%%%%%%% Springer-Verlag %%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+% RECOMMENDED %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+% choose options for [] as required from the list
+% in the Reference Guide, Sect. 2.2
+
+%\usepackage{grossdruck}      % switches to 11pt style - output same as
+                             % with [11pt] \documentclass option
+
+         % allows index generation
+        % standard LaTeX graphics tool
+                             % when including figure files
+\usepackage{multicol}        % used for the two-column index
+\usepackage[bottom]{footmisc}% places footnotes at page bottom
+% etc.
+% see the list of further useful packages
+% in the Reference Guide, Sects. 2.3, 3.1-3.3
+
+\makeindex             % used for the subject index
+                       % please use the style svind.ist with
+                       % your makeindex program
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\makeatother
+
+\usepackage{babel}
+
+\begin{document}
+
+\author{SAMSUNG INFRA RESEARCH LAB}
+
+\title{Tool for Automatic Compiler Tuning (TACT)\ User Manual}%\\ {\small SPIN Springer's internal project number, if known}}
+
+
+\subtitle{Rev. 0.9.7}
+\maketitle
+
+\tableofcontents{}
+
+
+\chapter{Introduction}
+
+The Tool for Automatic Compiler Tuning (TACT) provides a framework for automatic application tuning based on given criteria.  It provides a set of tools for program compilation and run in heterogeneous environment, automatic tuning of compiler options using genetic algorithm, and results analysis tools. This document describes the operation of the tool, provides instructions on adding new applications for tuning, configuring and starting tuning process, and analyzing the results. It also provides information about the tool internal structure.
+
+% Skip to quickstart guide chapter
+
+The document is organized as follows. In this chapter we  overview tool's main features and outline the document structure. In Chapter \ref{chapter-installation} we provide instructions for the tool installation.  In Chapter \ref{chapter-structure} we describe TACT structure and its internal workflow. In Chapter \ref{chapter-tutorial} in the form of tutorial we provide a step-by-step guide to adding new sample application into the tuning system and starting the tuning. In Chapter \ref{chapter-sample-tuning} we provide a step-by-step guide to overall tuning process for x264 application. Chapter \ref{chapter-results-analysis} is dedicated to result analysis techniques and tools, and in Chapter \ref{chapter-reference} we give a reference of all scripts and configuration files used in the system.
+
+\chapter{Installation\label{chapter-installation}}
+
+\section{Setting Up Required Tools\label{chapter-installation-setting-up}}
+Most of TACT code that run on host machine is written in Ruby, so \texttt{ruby} interpreter version 1.9.1 or higher and \texttt{rubygems} should be installed (on Debian-based system, it can be installed with \texttt{sudo apt-get install ruby ruby-dev rubygems}). 
+We are using \texttt{simple-xlsx} library for generating reports, and it requires \texttt{fast\_xs} and \texttt{rubyzip} gems (\texttt{sudo gem install rubyzip fast\_xs}). 
+Configure script requires \texttt{rubytree} gem (\texttt{sudo gem install rubytree}). 
+Also, for building Pareto graphs \texttt{gnuplot} is required (\texttt{sudo apt-get install gnuplot}).
+
+\section{Configuring System-Wide Parameters}
+To adjust the number of parallel jobs for compilation on host machine, edit \texttt{MAKE\_FLAGS} variable in \texttt{\$TACT\_DIR/etc/build-config}. Typically it should be set to the number of cores found on host machine plus one.  Note that the actual number of concurrent build processes may exceed that number since several build processes may run in parallel.
+
+
+\section{Setting Up Networking}
+TACT can be setup to use multiple nodes or just a single machine. In a single-machine setup TACT uses same host to compile and run programs. 
+In multi-machine setup it executes apps on separate dedicated machines (test boards), while simultaneously compiling on host machine, which 
+allows to speed up the tuning. Also such setup is required for cross-compilation. On a single machine, simultaneous compilation and execution 
+is also possible, but it may affect precision of the results. If you compile natively, and want a quick start, you may now skip the rest of the configuration 
+and go straight to Tutorial in Chapter \ref{chapter-tutorial}.
+
+In multi-machine mode, TACT uses NFS for communication with test boards, so the first step in tool installation is to set up NFS server and clients. The only requirement to NFS setup is that tool's installation directory should be accessible with the same path on all systems involved in tuning. 
+We suggest to run tuning under the same user on all nodes, and setup TACT into \texttt{\$HOME/<HOST-SYSTEM-NAME>}. Then this folder should be mounted on every target node. 
+
+Also you'll need to set up key-based authorization to testboards in order to enable running tasks on boards without user authorization. 
+Then, the tool can be installed in \texttt{\$HOME/<HOST-SYSTEM-\-NAME>/\-tact}. We will refer this direcory as \texttt{\$TACT\_DIR}. 
+
+TACT uses \texttt{\$TACT\_DIR/task\_manager/system.xml} configuration file for all network issues. In this file you should describe all target boards and intermediate hosts that are needed to reach the testboards.
+Example of \texttt{system.xml} file:
+
+\begin{lstlisting}
+<?xml version="1.0"?>
+<system_config>
+<!-- Description of tuning server -->
+<main_server network_name="condor" id="main" />
+<!-- Description of intermediate servers if any -->
+<inter_server connected_from="main" network_name="thrush" id="middle" />
+<!-- Description of boards -->
+<board id="tizen1" connected_from="middle" network_name="192.168.101.3" os="tizen" />
+<board id="tizen3" connected_from="middle" network_name="tizen3" os="tizen" />
+<!-- Description of boards classes -->
+<board_class class_name="cortex-A8">
+  <board1 id="tizen1" />
+  <board1 id="tizen3" />
+</board_class>
+<!-- Username for tact on boards and intermediate servers -->
+<tact_username value="tact"/>
+</system_config>
+
+\end{lstlisting}
+
+\chapter{The Tool for Automatic Compiler Tuning Structure\label{chapter-structure}}
+This chapter describes the Tool for Automated Compiler Tuning main concepts and structure.
+
+
+\section{High-Level Structure Overview}
+Tool's installation main directory contains subdirectories with the following content:
+\begin{description}
+
+\item[\texttt{apps}] \hfill \\
+        Test applications for tuning, including their source code and build directories, various scripts required to build and run test applications, results parsers and test descriptions. Run logs, tuning results and generated reports are also stored here.
+
+\item[\texttt{bin}] \hfill \\
+        Tool binaries and scripts, including \texttt{tact} script which is main command-line user interface script for the tool.
+
+\item[\texttt{docs}] \hfill \\
+        Tool documentation.
+
+\item[\texttt{etc}] \hfill \\
+        Tool's configuration files that are invariant from test applications.
+
+\item[\texttt{lib}] \hfill \\
+        Libraries used by the tool.
+
+\item[\texttt{target}] \hfill \\
+        Binary utilities compiled for target (as reported by \texttt{uname -m}), by default these include \texttt{timeout} and \texttt{seq} programs, which are required for tool operation. As target test boards often have very limited set of utilities on their root file system, this directory may contain common programs required to run tests, e.g.\ \texttt{perl}.
+\item[\texttt{task\_manager}] \hfill \\
+        Files used for communication with target boards.
+\end{description}
+
+Typically, tool's user only should be interested in contents of \texttt{apps} and \texttt{etc} subdirectories.
+
+\section{Applications, Tests and Benchmarks}
+Every test application directory consists of two levels: \emph{application} and \emph{test} level, where test is an instance of application.
+For example, application \texttt{app\_name} would be located in \texttt{apps\slash{}app\_name}, and contain one or more tests as its subdirectories. This structure allows to separate data that is specific to application itself from data specific for certain test.  For example, we may want to tune the same application with different input data or using different compiler or compilation parameters, or try tuning with certain patches applied to the application source. With two-level structure we can create symbolic links to common shared libraries, application sources and test descriptions from specific test directories into application directory.
+We refer test directory in documentation (as well as in scripts) as \texttt{\$TEST\_DIR}, and application directory as \texttt{\$APP\_DIR}.
+
+To help better understand these notions, we can draw an analogy with sports: the application and test would be in similar relationship as are athletics and sprint or jumping.  As sprint and jumping may share same stadium, spectators and sportsmen, the rules, judges and equipment may be different for each discipline. Tests may also share some scripts, data, application binaries or sources, but have their own tuning goals or environment.
+
+Each test instance in its turn can be a \emph{test suite} that consists of multiple \emph{benchmarks}.  In this case a composite value is computed from all benchmark results and is used as an optimization criterion in tuning. At the same time, performance of each separate benchmark still can be found in report tables, so the user can find out which tests contributes the most to performance change.
+
+\section{Application and Test Directory Structure}
+Test or application directories have the following structure:
+
+\begin{description}
+\item[\texttt{bin}] \hfill \\
+        Contains scripts for building, running test applications, parsing its output, computing hashes, etc.  Typically, this directory contains only \emph{interface} scripts, that are required by TACT for its operation.
+
+\item[\texttt{etc}] \hfill \\
+        Holds test configuration files. They contain compiler options to tune, number of generations for options evolution, number of testboards, build pools, program timeout, benchmark test suite description (including weights for each test) and other configuration data.
+
+%\item[\texttt{}]
+\item[\texttt{private-bin, private-etc}] \hfill \\
+        User auxiliary helper scripts and test-specific configuration data, that is not directly required by TACT interface can be stored here.
+
+\item[\texttt{log}] \hfill \\
+        Contains subdirectories with run logs. Each directory name is given by the daytime when tuning session was started.  The latest results are always available through symlink named \texttt{current}.
+
+\item[\texttt{pool}] \hfill \\
+        Contains build pools. Each pool contains separate directories where program is built, installed, and it's output is stored.  Pool is rebuilt for every compiler options combination that is tested on a testboard.  The notion of build pools is described in detail in Section \ref{section-build-pools}.
+
+\item[\texttt{src}] \hfill \\
+        Holds the application source code.  All pools are built from the same source code located in this directory.
+
+\item[\texttt{shared}] \hfill \\
+        Holds sources of programs that are shared among tests or pools of one test, e.g.\ libraries required by application, as well as their binary install tree. Everything that could be compiled only once for all tests (or pools) should be put in there. Typically, this directory is present only at application level directory.
+
+\end{description}
+
+Application- and test-level directories (\texttt{\$APP\_DIR} and \texttt{\$TEST\_DIR}) have similar structure; moreover, standard-API scripts required by the tool (like \texttt{compute-binary-hash}) are first searched in \texttt{\$TEST\_DIR}. If missing, they are searched in \texttt{\$APP\_DIR}, and, finally, in \texttt{\$TACT\_DIR}. This way, using directory hierarchy we implement some sort of inheritance model, so the scripts at "deeper" level may redefine those at higher levels.  Inheriting standard scripts doesn't require symlinks, but source and data directories should be linked explicitly. 
+
+Scripts and data are not strictly assigned either to test or application level, but code and data should be shared among tests as much as possible. This way, if user updates application from its repository, changes would become available to all tests, as they share the same source tree.
+
+\section{Main tuning parameters\label{section-tuning-params}}
+TACT implements a genetic algorithm to find the "best" options for compiling programs with the GNU Compiler Collection (GCC) C and C++ compilers. First, it reads a configuration file with tuning options and compiler options to be tuned, and generates a pool of strings ("chromosomes") consisting of random set of compiler options. Then, for each option string it compiles target application with given option string, possibly runs it on a test board if needed. Then it calls custom script to evaluate its "fitness" which is located in \texttt{\$APP\_DIR/bin/parse-results.rb} or \texttt{\$TEST\_DIR/bin/parse-results.rb}. This script should inherit base parser -- \texttt{\$TACT\_DIR\slash{}lib\slash{}ResultsParserBa\-se.rb}. "Fitness" value typically corresponds to application performance (e.g.\ \emph{fps} for graphical applications): the greater is its value, the greater chance the option combination gets to reproduce, but also code size or combination of size/performance can be taken. In such manner all compile option strings from the population pool is being evaluated, and then new generation starts.  Option combinations from the population pool from the previous generation are used to produce option combinations for the next generation: two "parent" option sets are chosen randomly from the population (though strings with greater fitness get greater chance to be picked), and new option set is constructed by picking  at random option values either from first parent or from second.  Then, the process is repeated until the fixed number of generations pass or user stops tuning.
+\label{main_parameters} 
+TACT has several main tuning paramers, that are specified in \texttt{\$TEST\_DIR/etc/tuning.conf}:
+\begin{description}
+
+\item[\texttt{AFTER\_CROSSOVER\_MUTATION\_RATE}] \hfill \\
+        Mutation rate for new entities after crossover.
+
+\item[\texttt{ARCHIVE\_SIZE}] \hfill \\
+        The number of "alive" entities for population before breeding.
+
+\item[\texttt{BUILD\_CONFIG}] \hfill \\
+        Specifies variables to be exported in shell. For example:
+\begin{lstlisting}
+<build_config name="CC" value="@static_params[:compiler] + '/bin/gcc'" />
+\end{lstlisting}
+Exports full path to compiler executable, based on \texttt{COMPILER} variable.
+
+\item[\texttt{COMPILER}] \hfill \\
+        Path to compiler installation directory.
+
+\item[\texttt{CROSSOVER\_RATE}] \hfill \\
+        The percent of entities made by crossover from total new entities.
+
+\item[\texttt{DO\_PROFILING}] \hfill \\
+        Specifies whether test should be compiled with usage of profile info.
+
+\item[\texttt{GREATER\_IS\_BETTER}] \hfill \\
+        Specifies whether greater result is better for fitness (as example -- higher frames per second is better).
+
+\item[\texttt{MEASURE}] \hfill \\
+        Specifies desired tuning type (performance, size or pareto).
+
+\item[\texttt{MIGRATION\_RATE}] \hfill \\
+        Specifies a probability of chromosome migration across populations.
+
+\item[\texttt{MUTATION\_RATE}] \hfill \\
+During the tuning "chromosomes" (option strings) are not only being cross-bred with each other, but also being "mutated" by changing randomly single options in a string.  This parameter specifies the probability of such event for every single option in a chromosome.
+
+\item[\texttt{NUM\_GENERATIONS}] \hfill \\
+Specifies how many generations to run before exit.  This can be set to an arbitrary large number, since the tuning can be stopped at any time by pressing \texttt{Ctrl+C}. However, usually good results can be expected after about 15-20 generations.
+Another way to find out when to finish tuning is looking at how average generation fitness changes: if the tuning still progresses and new good option combinations are still being found, then average fitness should increase or decrease, depending on what is better.   During the tuning generation average fitness can be tracked with the following command (executed in \texttt{\$TEST\_DIR}):
+
+\begin{lstlisting}
+tail -f log/current/progress.log | grep "Average fitness"
+\end{lstlisting}
+
+
+\item[\texttt{PARETO\_BEST\_SIZE}] \hfill \\
+        The number of cluster centers on pareto frontier.
+
+\item[\texttt{PARETO\_SUMMARY\_CHART\_GENERATION\_NUMBER}] \hfill \\
+        The number of pareto frontiers on summary chart, that represents tuning progress.
+
+\item[\texttt{POPULATION\_SIZE}] \hfill \\
+The number of chromosomes in a population.
+
+\item[\texttt{POPULATIONS}] \hfill \\
+        TACT can use several distinct populations within the same generation: chromosomes can cross-breed only with those of the same population.  It would be identical to having \texttt{NUM\_POPULATIONS} distinct runs, if not for migration: best chromosomes can randomly migrate from one population to another, exchanging genes.  Several simultaneous branches of evolution help to prevent from being stuck in a local maximum and speeds up evolution process.  The number of populations should be a multiple of the number of test boards used.  Please see Section \ref{section-parallel-build} for details on using multiple test boards.
+\begin{lstlisting}
+<populations>
+  <join_results name="local">
+    <population board_id="localhost"/>
+    <population board_id="localhost"/>
+  </join_results>
+</populations>
+\end{lstlisting}
+This section should contain one or more subsections \texttt{join\_results}. All joined boards should have the same performance. 
+For each population should be specified target board or board class.
+
+\item[\texttt{REPETITIONS}] \hfill \\
+        The number of repetition of test runs.
+
+\item[\texttt{SINGLE\_OPTION\_MUTATION\_RATE}] \hfill \\
+        Mutation rate for options.
+
+\item[\texttt{THREADS\_PER\_TESTBOARD}] \hfill \\
+        The number of pools used in tuning is evaluated as \texttt{NUM\_TESTBOARDS} $*$ \texttt{THREADS\_PER\_TESTBOARD}.  To benefit from parallel build and execution, \texttt{THREADS\_PER\_TESTBOARD} should be always set to value greater or equal to 2, otherwise compilation and run can not be pipelined, since compiled data should retain in pool until run is completed. For those applications which doesn't have enough distinct object files to compile (so they can not use parallel \texttt{make}), their effective compile time may improve from further increasing this parameter value.
+
+\end{description}
+
+\section{Build Pools\label{section-build-pools}}
+Build pools reside in \texttt{\$TEST\_DIR/pool/<POOL\_NUMBER>} directory. Pools can have any name, but usually in tuning they are nubered from 1 to number of pools.  First TACT tries to allocate a free pool from \texttt{\$TEST\_DIR/pool} directory.  If all pools are busy, then it waits until one becomes available.  After the pool is allocated, it calls \texttt{rebuild-pool} script (provided for given application by the user) to rebuild an application with given options.
+All the data that belongs to a single evaluation run of compile options string is stored in these directories. Typically, there are three subdirectories in each pool: \texttt{build}, \texttt{run} and \texttt{log}.  In \texttt{build} directory the application is built, in \texttt{run} it is installed, and \texttt{log} contains output from building, running application, parsing and verifying results. Upon pool deallocation these logs are copied from pool directory and are appended to corresponding tuning log in \texttt{\$TEST\_DIR/log/current}.  
+
+\section{Parallel Build and Execution\label{section-parallel-build}}
+Pools are created and maintained by TACT automatically, and typically user should not deal with them, unless debugging scripts while adding new test or application into the system.  However, the user needs to know about pools to specify the right number of them in configuration file in order to achieve good tuning performance.  
+
+Support for parallel compilation and execution greatly speeds up the tuning process. The parallelism is exploited on two levels. First, it allows building application at the same time as TACT waits for result of execution of previously compiled application. Second, it allows using of several test boards in the tuning process so to run tuned applications simultaneously on all of them. A task queue management, remote task execution and synchronization among host and test boards is done through \texttt{\$TACT\_DIR/task\_manager/runb} script which  can run any given command on any board or class of boards in the FIFO queue.
+
+Note that test boards used for tuning should not be necessarily of the same model, vendor or have the same CPU speed. The test board parallelism is implemented at the level of TACT populations, and only performance results obtained on the same test board or class of boards are "competing" with each other, so evolution branches progress independently in each population. However, with migrations allowed between populations, best compiler option combinations from each population can spread themselves through other populations and continue their competition with the "native species" of those populations.
+
+\begin{comment}
+\section{Catching Miscompiles}
+\section{High-level workflow}
+tact reference-runs start-tuning
+%tact internals: pool directory structure
+%\section{Build pool structure\label{section-build-pool-structure}}
+\end{comment}
+
+\section{Workflow of the Tuning Process}
+The tuning tool command-line interface consists of one main script -- \texttt{tact}.
+
+On host machine, tuning is started with \texttt{tact start-tuning} command, which basically runs tuning process with given parameters. Here we will describe the internal workflow of that script. When executed, it performs the following actions:
+\begin{description}
+\item[\bf Allocate a pool. \rm] 
+A free build pool is allocated from the \texttt{\$TEST\_DIR/pool} directory. The current pool is exported as \texttt{\$POOL\_DIR} environment variable and is available to user scripts. In pool directory file \texttt{in\_use} is created, which indicates that pool can not be allocated with other instances of tuning.
+\item[\bf Rebuild pool.\rm]
+The script \texttt{\$TEST\_DIR/bin/rebuild-pool} is called, which rebuilds the minimal number of object files in \texttt{\$POOL\_DIR/build} directory and installs test application in \texttt{\$POOL\_DIR/run}.
+\item[\bf Send task to a test board. \rm]  Communication with test board is done via \texttt{\$TACT\_DIR/task\_manager/runb} scirpt. The exclusive access to test board is granted by locking on file \texttt{\$TACT\_DIR/task\_manager/boardsBOARD\_NAME}. Then, commands to execute application is written to \texttt{\$POOL\_DIR\slash{}board\_\allowbreak run} file. Then, host just waits until \texttt{runb} finished run on board.
+\item[\bf Run pool.\rm]As soon as queue reach desired task, \texttt{\$POOL\_DIR/board\_run} will be executed on board. This script contain needed exports, like the number of test repetitions and timeout. Full test output is captured to \texttt{\$POOL\_DIR/log/ run.log}. After run is finished, task will be removed from queue and it proceeds to the next task. 
+\item[\bf Parse results.]
+After run finished saved test output is passed to application-specific \texttt{parse-results.rb} script,  which is searched in \texttt{bin} of either \texttt{\$TEST\_DIR} or \texttt{\$APP\_DIR}. This script converts arbitrary plain-text output of the test to unified XML representation according to test description in \texttt{\$TEST\_DIR/etc/test-descr.xml}. The XML result file is saved as  \texttt{\$POOL\_DIR/log/run.xml}. The advantage of using XML representation is unification of result verification and analysis tools for all test applications.
+\item[\bf Verify XML results.\rm]In the process of verification the results correctness is checked, i.e.\ output hashes from different repetitions are compared with each other and with those in a reference file. If hashes don't match, then status for a run is set to \emph{error}. Though this verification script can be test-specific, usually the standard script from \texttt{\$TACT\_DIR/bin} is used. An XML file with verified run results is written to \texttt{\$TEST\_DIR/log/current/runs}. The latter contains XML files for all runs, named with generation, population and run number on which they were obtained.
+\item[\bf Compute score.\rm]Verified XML file with run results is read by application-invariant \texttt{compute-score} script, which computes a composite value for benchmark suite according to evaluation method specified in test's \texttt{etc\slash test-descr.xml} (the most common method used is geometric mean).
+The computed value is updated in XML log file, and written to \texttt{log\slash current\slash results.log} along with compile options string. Finally, this value is passed back to main evolution script and assigns it as a fitness value to correspondent options combination.
+\item[\bf Free pool.\rm]
+Logs for this run are appended to global logs in \texttt{log/current}, and the pool is released by removing file \texttt{in\_use}.
+\end{description}
+
+The current status (one of the actions described above) of tuning on a given pool is reflected in \texttt{status} file in pool directory. A convenient way to continuously monitor status of all pools in \texttt{top}-like style is provided by \texttt{watch-status} script found in \texttt{\$TACT\_DIR/bin}.
+
+You can tune applications by performance, size or pareto. Tuning by performance is described below in example section. Tuning by size and pareto have some differences. For tuning by size you need one additional script -- \texttt{compute-size}, and you don't need testboards. In case of pareto tuning you need both \texttt{compute-size} script and testboards, also for paretoo tuning you should add some specific options to config, such as archive size. 
+
+Tuning progress and results for pareto are also stored in directory
+ \texttt{\$TEST\_\allowbreak DIR\slash{}current\slash{}archives\slash{}generationG\_P}, where $G$ and $P$ are generation and population numbers respectively. You may be interested in \texttt{results.pdf} and \texttt{archive.log} which contains graphical progress and best options archive respectively.
+
+\section{Packages}
+TACT has functionality to run a set of tests with specified options like SPEC. First you shoud create symlinks for desired tests in 
+\texttt{\$TACT\_DIR/packages\slash{}package\_name/test\_set/} directory. Then you should create config for package:
+\texttt{\$TACT\_DIR/packages/package\_name/etc/tuning.conf}. Options are the same as for tuning, but package needs only prime options, 
+baselines and desired board specified in \texttt{BOARD\_ID} parameter. 
+For test a package you should run \texttt{tact package-run} from package directory. 
+Then TACT automatically run all tests with \texttt{baseline}s and produce report.
+
+\chapter{Tutorial: Adding New Application and Starting Tuning\label{chapter-tutorial}}
+
+In this chapter we show how to add new application for tuning into the system. In this step-by-step guide we will explain the required modifications to configuration files and interface scripts, and how to start tuning of the application.
+
+\section{An Example Program for Tuning}
+
+Change directory to \texttt{tact\slash{}apps\slash{}tutorial} in your base tool directory. We well refer this directory as \texttt{\$APP\_DIR}, and base TACT directory as \texttt{\$TACT\_DIR}. 
+
+In this tutorial we will tune a very simple example program, located in \texttt{apps/tutorial/src/test.c}.  In this program we use preprocessor defines to emulate effects of compiler optimization options. The number of iterations in program main loop is being adjusted so to make program run faster or slower depending on \texttt{-D...} options passed to the compiler. The valid parameters are \texttt{-DFAST}, \texttt{-DEVEN\_FASTER}, \texttt{-DSLOW} and \texttt{-DMISCOMPILE}.  The first option will decrease program run time; the second will decrease it even more, but only if specified together with the first option; and the last two options respectively will slow program down and emulate a miscompile. This way, the automatic tool should be able to find combination of \texttt{-DFAST} and \texttt{-DEVEN\_FASTER} as the best one, and filter out \texttt{-DSLOW} and \texttt{-DMISCOMPILE}.
+
+Also our program will output "internally measured performance" (as it might have output \emph{fps} value if it were a graphical application). In this example we will be maximizing this "performance" (though we as well might have opted for minimizing runtime). The program will also have "built-in" correctness verification routine, that will "compute" hash of its output. Again, for graphical application it might have computed output hash of the last frame in a framebuffer.
+\\
+\\
+
+\begin{lstlisting}
+int main()
+{
+#ifdef MISCOMPILE
+  printf("Segmentation fault.\n");   exit(139);
+#endif
+
+// Program main loop (the number of iterations adjusted accordingly)
+for (...) { }
+
+// Output "internally measured performance (e.g. fps)"
+#ifdef SLOW
+  printf("5 - slow\n");
+#else
+#ifdef FAST
+#ifdef EVEN_FASTER
+  printf("90 - very fast\n");
+#else
+  printf("30 - fast\n");
+#endif
+#else
+  printf("10 - normal\n");
+#endif
+#endif
+
+  // Print an "output hash" value
+  printf("HASH=123\n");
+  return 0;
+}
+\end{lstlisting}
+
+
+
+\section{Setting Up Scripts for Tutorial}
+
+First of all we need to write \texttt{\$APP\_DIR/bin/init-pool} script, which TACT will call to build tutorial program source. This script will be provided the following three environment variables as an input:
+
+\begin{itemize}
+\item \texttt{POOL\_DIR} -- path to build pool
+\item \texttt{TEST\_DIR} -- path to test directory (in our case \texttt{\$TACT\_DIR/apps/tutorial\slash tests/default})
+%\item \texttt{CC} - compiler
+\item \texttt{FLAGS} -- compiler flags
+\end{itemize}
+
+The sample \texttt{init-pool} script looks like this:
+
+\begin{comment}
+\newcommand{\Hilight}{\makebox[0pt][l]{\color{cyan}\bf\rule[-4pt]{\linewidth}{12pt}}}
+%\Hilight%
+\end{comment}
+
+\begin{comment}
+#!/bin/sh
+
+# init-pool
+# POOL_DIR - path to pool
+# TEST_DIR - path to test dir
+# CC - compiler
+# FLAGS - compiler flags
+
+mkdir $POOL_DIR/run 2> /dev/null
+\end{comment}
+
+\begin{lstlisting}[escapechar=\%]
+# A directory with test-private configs
+CONFIG_DIR="$TEST_DIR/private-etc"
+
+# Include file with compiler configuration. It sets some compiler variables 
+# (e.g. $C_FLAGS, $LD_FLAGS, adds proper -I and -L options if needed, etc)
+. $CONFIG_DIR/build-config
+
+# Build binary with given $FLAGS
+$CC $FLAGS $TEST_DIR/src/test.c -o $POOL_DIR/run/tutorial
+\end{lstlisting}
+
+For large applications this script would contain \texttt{configure \textendash\textendash prefix= \$POOL\_DIR/run \&\& make \&\& make install} commands.
+
+Second script, \texttt{\$APP\_DIR/tests/default/bin/rebuild-pool}, is invoked when TACT needs to rebuild pool with new compiler options (passed as \texttt{\$FLAGS}).  For our simple application, it will coincide with \texttt{init-pool} script, however, ideally it should contain commands to rebuild only the minimum number of files in order to optimize build time. The usual technique to achieve that is to rebuild only those object files containing hot functions that matter most for the performance. To do that, those object files should be removed, and then \texttt{make} command will rebuild only the missing files.
+
+The reason why this script is located at deeper level, in \texttt{default} test directory, is that different tests may have different hot functions, therefore, this script is test-specific.
+
+Next script is \texttt{\$APP\_DIR/tutorial/bin/compute-binary-hash}. This script computes hash of an application binary and is used by TACT to determine whether different compiler options result in identical binaries (this hash is only used at the post-analysis reducing of the result, and identical binary still may run multiple times during tuning). We will use \texttt{md5sum} to compute hash:
+
+\begin{lstlisting}
+# POOL_DIR - path to pool
+
+# This script should print out a single binary hash for test binaries,
+# e.g. md5sum of .so file of the library under optimization
+
+md5sum $POOL_DIR/run/tutorial | awk '{ print $1 }'
+\end{lstlisting}
+
+Then, a script is needed to execute our application on a target test board. This script is located in \texttt{\$APP\_DIR/tests/default/private-bin/target- run-single-test}. 
+For tutorial application this script can look like this:
+
+\begin{lstlisting}
+# POOL_DIR - path to pool
+
+# This script should run the test using the executables from $POOL_DIR/run
+$POOL_DIR/run/tutorial
+\end{lstlisting}
+
+Technically, TACT calls its interface script \texttt{\$APP\_DIR/tests/default\slash bin/target-run-test}, which can be customized, but we will use its standard variant that is designed for running test suites and utilizes \texttt{target-run- single-test} as a helper that runs single benchmark from a test suite, while benchmarks that constitute a test suite are listed in \texttt{private-etc/test-set}. Since it's a user script, its path is prefixed with \emph{"private"}. Since we have the only test, our \texttt{private-etc/test-set} will contain the only test name,  \emph{"tutorial"}.
+
+Also, we need a script for parsing results of the test. This script is also test-specific and is located in \texttt{\$APP\_DIR/tests/default/bin/parse-results.rb}. This script reads test output from its standard input, parses it and writes XML file of certain format to standard output. The easiest way to write a parser script is to extend Ruby base class \texttt{ResultsParserBase} and override \texttt{user\_handle\_single\_line} method for our test. This method takes each single line of test output as parameter and determines beginning of output of a new benchmark from a test suite\footnote{In documentation we assume that an \emph{application} may have several \emph{tests}, and those could be a \emph{test suites}, consisting of multiple \emph{benchmarks}. In TACT functions naming here we use \emph{benchmark} and \emph{test} terms interchangeably.},
+ test name, and test result by parsing lines using regular expressions. It should call \texttt{note\_next\_test} when it sees first line of the next benchmark output, \texttt{set\_current\_test\_name} when it finds out a current benchmark name, and \texttt{store\_current\_value} with appropriate parameter when it has parsed a performance value or output hash. The base parser class will take care about the rest and output XML file in an appropriate format.
+
+\begin{lstlisting}
+#!/usr/bin/ruby
+
+class AppResultsParser < ResultsParserBase
+    def user_handle_single_line(line)
+          # Extract test value and begin new test
+          matches = line.match(/^(\d+)\s-\s(slow|normal|fast|very fast)/)
+          if matches && matches.length == 3
+             # When encountering the first line of the output of new test,
+             # switch test number
+             note_next_test
+
+             # In tutorial we have only one test name, so set it to 'tutorial'
+             set_current_test_name("tutorial")
+
+             # first matched value is a "performance value" -- result of a test run
+             res = matches[1].to_f
+             store_current_value('value', res)
+          end
+     end
+end
+
+\end{lstlisting}
+
+Finally, we need to set up configuration files for application tuning:
+
+\begin{itemize}
+\item\texttt{\$APP\_DIR/tests/default/etc/test-descr.xml} -- Test description.
+
+This XML file describes names of benchmarks constituting this test, their weights, method for calculating composite value for a test suite and whether optimal value is the smaller or the greater one.
+For our example summary method is the arithmetic mean, greater value is better (if we were optimizing for time, it would be smaller) and we have only one test \texttt{tutorial} with weight 1:
+
+\begin{lstlisting}
+<benchmark_description
+    summary_method="mean"
+    greater-is-better="true">
+    <test name="tutorial" weight="1.0"/>
+</benchmark_description>
+\end{lstlisting}
+
+\item\texttt{\$APP\_DIR/tests/default/etc/tuning.conf} -- configuration file with compiler options to be tuned for TACT. In our case we put in here four defines:
+\texttt{-DFAST}, \texttt{-DEVEN\_FASTER}, \texttt{-DSLOW} and \texttt{-DMISCOMPILE}. The header of this file (all the strings before \emph{flags} section) is a configuration options for TACT.
+\begin{lstlisting}
+<?xml version="1.0"?>
+<config>
+    <prime command=""
+           flags="-O2 -mfpu=neon -mfloat-abi=softfp" />
+
+    <baseline description="-O1 -mfpu=neon -mfloat-abi=softfp"
+              command=""
+              flags="-O1 -mfpu=neon -mfloat-abi=softfp" />
+
+    <baseline description="-O2 -mfpu=neon -mfloat-abi=softfp"
+              command=""
+              flags="-O2 -mfpu=neon -mfloat-abi=softfp" />
+
+    <baseline description="-O3 -mfpu=neon -mfloat-abi=softfp"
+              command=""
+              flags="-O3 -mfpu=neon -mfloat-abi=softfp" />
+
+    <baseline description="-Os -mfpu=neon -mfloat-abi=softfp"
+              command=""
+              flags="-Os -mfpu=neon -mfloat-abi=softfp" />
+    <build_config name="TARGET" value="arm-unknown-linux-gnueabi" />
+    <build_config name="HOST" value="arm-unknown-linux-gnueabi" />
+    <build_config name="CC" value="@static_params[:compiler] + '/bin/arm-unknown-linux-gnueabi-gcc'" />
+    <compiler value="/home/user/x-tools/gcc-4.6.2" />
+    <populations>
+        <join_results name="local">
+            <population board_id="localhost"/>
+        </join_results>
+    </populations>
+    <population_size value="10" />
+    <mutation_rate value="0.07"  strategy="uniform_replace"/>
+    <migration_rate value="0.2" />
+    <greater_is_better value="false" />
+    <repetitions value="1" />
+    <do_profiling value="false" />
+    <num_generations value="10" />
+    <num_testboards value="1" />
+    <threads_per_testboard value="4" />
+    <measure value="performance"/>
+
+
+    <!-- A list of flags that will be "evolved" by TACT -->
+    <flags>
+		<!-- These flags can have value "-D..." or just an empty string. -->
+		<flag type="enum" value="-DSLOW | "/>
+		<flag type="enum" value="-DFAST | "/>
+        <flag type="enum" value="-DEVEN_FASTER | "/>
+        <flag type="enum" value="-DMISCOMPILE | "/>
+    </flags>
+</config>
+
+\end{lstlisting}
+\label{flag_parameters}
+In \texttt{flags} e.g.  each compiler flag is declared as a separate tag. There are several possible flag types. Type \emph{simple} used in this example means a flag that can have two possible values: the one specified in \emph{value} attribute (when turned on) and an empty string (when turned off). \\
+\begin{lstlisting}
+<flag type="gcc_flag" value="-fmodulo-sched"/>
+\end{lstlisting}
+The optimization flag of \emph{gcc\_flag} type should start with \texttt{-f} or \texttt{-m} prefix and has two possible values: \texttt{-f\it value} and \texttt{-fno-\it value} (the same applies to \texttt{-m} prefix). The negation is created automatically in TACT. For example, \texttt{-fmodulo-sched} can be transformed to \texttt{-fno-modulo-sched}.\\
+\begin{lstlisting}
+<flag type="enum" value="-fira-region=one|-fira-region=all|-fira-region=mixed"/>
+\end{lstlisting}
+Type \emph{enum} means TACT will use exactly one of the values (separated by "|") of the specified string.\\
+\begin{lstlisting}
+<flag type="param" value="--param large-stack-frame" default="256" min="200" max="312" step="8" separator="=" />
+\end{lstlisting}
+Type \emph{param} allows to tune GCC parameters. The declaration syntax is self-explanatory. However, some GCC parameters have stronger restrictions, and can be declared only as \emph{enum} type:
+\begin{lstlisting}
+<flag type="enum"  value="--param l1-cache-line-size=0|--param l1-cache-line-size=16|--param l1-cache-line-size=32|--param l1-cache-line-size=64|--param l1-cache-line-size=128|--param l1-cache-line-size=256"/>
+\end{lstlisting}
+
+\end{itemize}
+
+\section{Starting Tuning}
+First, if you want to work with a test board, you need to write configuration file for accessing a test board (a sample file can be found in Chapter \ref{chapter-installation}).
+
+On your host machine, change directory to \texttt{\$TACT\_DIR}, and run the following commands:
+
+\begin{lstlisting}
+`bin/set-env`
+cd apps/tutorial/tests/default/
+\end{lstlisting}
+
+Similarly, the first command will set up the tuning environment on host, and the second changes dir to test directory, so \texttt{tact} knows which test we're tuning.
+
+The following commands will prepare \texttt{log} directory for current run, and initialize pools building them with baseline flags (typically \texttt{-O2}):
+\begin{lstlisting}
+tact init-test
+tact init-pools
+\end{lstlisting}
+
+Now, we will run test application on each board and save reference output hashes and reference results in \texttt{log/current/ref/}:
+
+\begin{lstlisting}
+tact reference-runs
+\end{lstlisting}
+
+Finally, we can start the tuning with the following command:
+\begin{lstlisting}
+tact start-tuning
+\end{lstlisting}
+
+For results analysis, please proceed to Step \ref{item:report} in Chapter \ref{chapter-sample-tuning} (tuning for Pareto-optimal set of parameters). 
+
+\chapter{Tutorial: Pareto-tuning of x264 application\label{chapter-sample-tuning}}
+This tutorial shows how to perform Pareto-based tuning for performance / code size tradeoff.
+
+\begin{enumerate}
+\item \bf Set up the required tools. \rm Please be sure to follow instructions in Section \ref{chapter-installation-setting-up} to install all the tools and modules required by TACT system.
+
+\item \bf Set up the environment. \rm Change dir to your TACT top installattion directory and run \texttt{`bin/set-env`} to set \texttt{\$TACT\_DIR} and other required environment variables.
+
+\item \label{tutorial-pareto-netw} \bf Set up the networking. \rm There is a quick way to start the tuning on a single host machine that will be used for both compilation and execution. In this case you may now skip to Step \ref{tutorial-pareto-skip}. Otherwise please follow installation instructions in Chapter \ref{chapter-installation} to set up NFS, SSH and public/private keys on your testboard(s) and tuning host machine, and proceed to the next step.
+
+\item \bf Configure access to hardware nodes involved in tuning. \rm Edit the file \texttt{\$TACT\_DIR/task\_manager/system.xml} to match your configuration. For example, for one server and one test board directly connected to it you can create the following configuration:
+\begin{lstlisting}
+<system_config>
+<main_server id="mypc" network_name="localhost"/>
+<board id="beagle1" network_name="beagle" connected_from="mypc"/>
+</system_config>
+\end{lstlisting}
+
+\item \label{tutorial-pareto-skip} \bf Go to test directory. \rm Change dir to x264 test direcory:  
+\begin{lstlisting}
+cd $TACT_DIR/apps/x264/tests/default
+\end{lstlisting}
+
+
+\item \bf Set up test application's configuration. \rm 
+Edit \texttt{etc/tuning.conf} and set \texttt{board\_id} tag value to match your testboard id from \texttt{system.xml} (or, if you have opted for single machine to do the tuning at Step \ref{tutorial-pareto-netw}, then just set \texttt{id} to \texttt{"localhost"}). Also set \texttt{measure} value to \texttt{"pareto"}, and adjust \texttt{compiler} parameter value to point at your GCC's installation base directory (for system default compiler it should be \texttt{"/usr"}). Also check that all other parameters suit your tuning goals. The configuration parameters are described in Chapter \ref{chapter-reference} in section with test-specific scripts.
+
+
+\item \bf Set up build pools and do reference runs. \rm 
+Run the following commands (please be sure to run them from \texttt{./tests/default} directory itself, not from its subdirectories):
+\begin{lstlisting}
+tact init-test
+tact init-pools
+tact reference-runs
+\end{lstlisting}
+This will build x264 with each set of compiler flags specified in \texttt{baseline} tag of \texttt{tuning.conf} and perform reference runs. The code size and performance for reference runs will be remembered for later comparison, as well as result hash for detecting miscompiles.
+
+\item \bf Start tuning. \rm Finally, start tuning:
+\begin{lstlisting}
+tact start-tuning
+\end{lstlisting}
+During the tuning process you can watch the progress and current results in directory
+\texttt{\$TACT\_DIR/apps/x264/tests/default/log/current/archives}.
+Files \texttt{generationN\_K/output.pdf} show current Pareto front ($N$ and $K$ correspond to generation and population numbers, respectively). Also in \texttt{joint\_archives} directory there's the same data joined from all populations. Compiler flags and results for Pareto-front can be found in \texttt{*.xml} files in the same directory. The results on Pareto-front are clustered by using \emph{k-means} method, and are saved to \texttt{log/current/best} directory.
+
+\item \label{item:report} \bf Create tuning report. \rm To create tuning report in \texttt{xlsx} format, run the following command:
+\begin{lstlisting}
+tact verify
+\end{lstlisting}
+For performance tuning, this command picks the best tuning results from all generations. In case of Pareto-tuning, the best Pareto-front is built at the tuning time. \sout{Then, it verifies the best flags combinations by running them once again on the testboards} (currently verification is not supported). In both cases, at this stage the report for best results is generated in \texttt{log/current/results.xlsx}. For Pareto-tuning, it contains the performance and code size for each solution in resulting Pareto-front, as well as comparison with baseline flags specified in \texttt{tuning.conf}.
+
+\item \bf Reduce result by binary-hash. \rm Refine the tuning results by removing all compiler flags that do not affect the application binary:
+\begin{lstlisting}
+tact reduce-flags
+\end{lstlisting}
+The results will be placed in \texttt{log/current/best-reduced/*.xml}
+\item \bf Reduce by "score". \rm In case of Pareto-tuning, this procedure will try removing those options without which the solution is still Pareto-optimal. I.e.\ it will strive to move the solution in bottom-left direction on Pareto-graph by dropping as much options as possible. This process is started by this command:
+\begin{lstlisting}
+tact reduce-by-score
+\end{lstlisting}
+After all flags that do not make the solution worse in the sense of Pareto are removed, it continues removing the options that contribute the least to Pareto-optimality (i.e.\ at each step allowing drift in top-right direction by the minimum amount). This way, the most important options in the sense of Pareto are retained, and get removed only at the latest stages of the process.  The results of this process are saved here:
+\begin{lstlisting}
+log/current/best-byscore-reduced/*.xml.report
+\end{lstlisting}
+
+\item \bf Results analysis. \rm By analyzing \texttt{*.xml.report} files, the most important compiler flags can be identified.  The first table in the report reflects the proccess of dropping a locally least useful option at each step, in the reverse order ("least useful" is either for Pareto-optimality or for the performance, depending on the tuning goal). Each line in that table corresponds to flags set that includes all flags starting from the top of the table to that line. The best reduced flag combination is shown in the line marked with an asterisk (i.e.\ dropping other options than those below that line causes degradation). The table can be also read in natural top-down order: each line in the table adds one compiler flag, and the numbers show the effect of adding that flag compared to the previous line and to -O2. Usually, it takes only first few flags from this table to retain most of tuned performance, while keeping it clear where the improvement comes from.
+
+\end{enumerate}
+
+\chapter{Tools for Analysis of Tuning Results\label{chapter-results-analysis}}
+
+\section{Verifying Tuning Results}
+After tuning it is possible to verify best tuned results. It's only needed to initialize testboards, create reference runs in current configuration (checker needs output hashes to compare), and to run 
+\begin{lstlisting}
+tact verify <LOG_DIR_NAME>
+\end{lstlisting}
+where a parameter is a name of subdir of \texttt{log/} with tuning results. Verifier will select best 5 options sets for each board and re-run the test compiled with this options. In \texttt{log/log\_dir\_name} the next folders will be created:
+\begin{itemize}
+\item\texttt{best}\\
+This folder will contain text files with best option sets for each testboard. Also XML files for runs with best options are copied here from \texttt{runs} folder.
+\item\texttt{verified}\\
+This directory will contain XML files created while verifying best option sets. Each option set is verified on each testboard.
+\item\texttt{report}\\
+This directory will contain report tables in XML format (compatible with MS Excel). There will be given one table per testboard using "old" tuning results and one table for each best option sets on each testboard containing verifying results.
+\end{itemize}
+
+\section{Single Run}
+This feature can be used when all configuration and reference-runs are done.
+\texttt{tact single-run compiler\_options testboard\_num}\\
+This command allows to build application using specified options and run it on specified testboard.
+XML file with run results is placed at \texttt{log\slash current\slash single.xml}
+
+\section{Running Using Option Sets From a Text File}
+This feature can be used when all configuration and reference-runs are done.
+\texttt{tact verify-file filename}\\
+This command allows to build application using options written in text file, and then run them on testboard(s).
+One string of text file should contain one option set. The result XMLs are placed in \texttt{verified} directory, and result table (in XML compatible with MS Excel format) is placed in \texttt{report} directory.
+
+\section{Diagnosing Miscompiles}
+With TACT you can find out which of GCC options may produce miscompiled or very slow code and then exclude this options from search. 
+This can be done by running \texttt{process-log results.log | sort -gk2 | less}. This combination will parse results log, count total and average score for each option and then sort options by their average score. Total score of option is sum of results of tests which were built with this option. Average score counts similarly. If aplication miscompiled then its score would be 1000000000. So if after $x$ runs, where $x$ pretty big, (200 is pretty big in many cases) score of some option equal to $x * 1000000000$, then this option is bad and better to exclude this option from tuning.conf. For example dom test of webkit always fail with segmentation fault if it was built with \texttt{-fno-reg-struct-return}.
+
+\section{Checking config and compiler}
+TACT includes command \texttt{tact check} for checking some useful cases:
+\begin{itemize}
+\item unknown options in \texttt{tuning.conf}
+\item binary hash is equal for all pools
+\item -O2 and -O0 have different hashes for init-pool and rebuild-pool
+\item compilation fails with unknown option
+\item compute-size cannot calculate size if compilation fails
+\end{itemize}
+This command helps to avoid some errors on tuning stage.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Evovis}
+
+Evovis (evolution visualizer) is a script that reads a log produced by TACT and
+plots the distribution of flags values among the populations.
+
+\subsection{Requirements}
+
+Evovis is written in perl and requires the \texttt{Chart::Gnuplot} perl module 
+(which requires gnuplot itself). To install gnuplot on debian you can do:
+\begin{lstlisting}
+aptitude install gnuplot
+\end{lstlisting}
+To install \texttt{Chart::Gnuplot} (The second line should be typed in the CPAN shell):
+\begin{lstlisting}
+perl -MCPAN -we "shell"
+install Chart::Gnuplot
+\end{lstlisting}
+
+\subsection{Example}
+
+The simplest way of running this script is as follows:
+\begin{lstlisting}
+evovis -o example /path/to/results.log
+\end{lstlisting}
+This command will generate a lot of png files and several html files in the current directory.
+The main html file will be called \texttt{example.html} and will contain a link for each flag.
+
+This line will produce a better result in some sense:
+\begin{lstlisting}
+evovis -o example --format svg --percent --noyscale --noxscale --alltics --nounused --cmaxscale -c $TACT_DIR/etc/evovis-params.conf /path/to/results.log
+\end{lstlisting}
+
+\subsection{Options}
+
+Generally evovis should be run like this:
+\begin{lstlisting}
+evovis [OPTIONS] /path/to/results.log
+\end{lstlisting}
+
+\begin{description}
+\item[\texttt{-\@-help}] \hfill \\
+        Print a brief help.
+
+\item[\texttt{-o output-name}] \hfill \\
+        Set the prefix of generated file names. 
+
+\item[\texttt{-c configuration-file}] \hfill \\
+        Use this configuration file. Configuration file is a list of
+        patterns. Its syntax is described in the next subsection.
+        By default it uses \texttt{\$TACT\_DIR/etc\slash{}evovis.conf}
+
+\item[\texttt{-v}] \hfill \\
+        Be verbose. It is useful for debugging configuration files or the script itself.
+
+\item[\texttt{-\@-percent}] \hfill \\
+        Use percent of population instead of count.
+
+\item[\texttt{-\@-noyscale}] \hfill \\
+        Don't scale Y axis.
+
+\item[\texttt{-\@-noxscale}] \hfill \\
+        Don't scale X axis.
+        
+        These options can make each plot uglier but they simplify 
+        the comparison of different plots. It is also recommended to use 
+        \texttt{-\@-alltics} for this purpose.
+
+\item[\texttt{-\@-alltics}] \hfill \\
+        Display all tics on X axis.
+
+\item[\texttt{-\@-nounused}] \hfill \\
+        Don't add tics for unused values. (e.g. if we have two values of
+        some parameter, 128 and 64, then all values between them will be on
+        the X axis without this flag)
+
+\item[\texttt{-\@-nocscale}] \hfill \\
+        Don't scale color. This option makes the brightest color correspond
+        to 0.
+
+\item[\texttt{-\@-cbest}] \hfill \\
+        Use the best individual (instead of the average fitness) to color
+        the bars.
+
+\item[\texttt{-\@-clocal}] \hfill \\
+        Makes the meaning of color local to specific population and
+        generation. It also makes harder to compare different plots.
+
+\item[\texttt{-\@-cplacelocal}] \hfill \\
+        Makes the meaning of color local to specific population but not
+        generation.
+
+\item[\texttt{-\@-cmaxscale}] \hfill \\
+        Makes black correspond to $\mbox{average} + (\mbox{average} - \mbox{best})$. Seems to be
+        meaningless with \texttt{-\@-nocscale}. The effect should be close to the
+        effect of \texttt{-\@-gamma}.
+
+\item[\texttt{-\@-onegen}] \hfill \\
+        Merge generations.
+
+\item[\texttt{-\@-onepop}] \hfill \\
+        Merge populations
+
+\item[\texttt{-\@-format format-eg-png}] \hfill \\
+        Set the format of images. The default value is png.
+
+\item[\texttt{-\@-size "w,h"}] \hfill \\
+        \texttt{"1,1"} is a good choice
+
+\item[\texttt{-\@-gamma g}] \hfill \\
+        Gamma correction of bar color.
+
+\item[\texttt{-\@-font "Arial,12"}] \hfill \\
+        Font.
+
+\item[\texttt{-\@-ticfont "Arial,12"}] \hfill \\
+        Tics font.
+
+\end{description}
+
+\subsection{Configuration File}
+
+Configuration file is a list of patterns, against which the flags will be matched.
+It may also contain rules that define which part of a flag is its name and which is its value.
+
+For example, the default configuration file looks like this:
+\begin{lstlisting}
+--param ([^=]+)=(\S+) -> $1 $2
+([^= ]+)=(\S+) -> $1 $2
+-fno-(\S+) -> -f$1 no
+-f(\S+) -> -f$1 yes
+-DNO_(\S+) -> -D$1 no
+-D(\S+) -> -D$1 yes
+\end{lstlisting}
+There are patterns on the left hand side of the \texttt{->} and rewriting rules on the right hand side.
+\texttt{\$1} corresponds to the first pair of parentheses in the pattern and \texttt{\$2} to the second.
+The flag should be rewritten to something that looks like \texttt{name value}, i.e.
+a name and a value delimited by a space. So neither name nor value can contain space symbols.
+The patterns are ordinary perl regular expressions. 
+
+The substrings of a compile string correspondig to the patterns will be searched and eliminated from it
+until there is no matching substring left in the compile string. So if you want to ignore some flags,
+just make sure there is no pattern it can be matched against.
+
+There is a configuration file that doesn't look at binary flags (\texttt{-f...} and \texttt{-fno-...}, it
+is named \texttt{\$TACT\_DIR/etc/evovis-params.conf}
+
+\section{Reducing the Resulting Compiler Option Set}
+
+The set of flags produced by TACT may be redundant: some flags may do nothing
+but they will be present in compile string anyway. This script tries to reduce
+the sets of flags for best runs by eliminating the flags whose presence doesn't 
+affect the hash of binary files. It tries to achieve this by performing as few as possible
+compilations but it still may take a long time (about a day).
+
+This script reduces the best flags sets, so you should run the verifier
+before running this script. To launch the reducing, type:
+\begin{lstlisting}
+tact reduce-flags
+\end{lstlisting}
+It will take the best runs from \texttt{\$TEST\_DIR/log/current/best},
+recommendations from \texttt{\$TEST\_DIR/log/current/reduce-flags-recommendation},
+cache from \texttt{\$TEST\_DIR/log/current/reduce-flags-cache} and
+the reference run from \texttt{\$TEST\_DIR/log/current/ref/1.xml}. Then it will
+reduce compile strings of best runs and write the results to 
+\texttt{\$TEST\_DIR/log/current/reduce-flags- results}. It will also
+put xml files with compilation results to \texttt{\$TEST\_DIR\slash{}log\slash{}current\slash{}best-reduced}.
+
+Recommendation file is just a list of pairs \texttt{uselessness flag-name}, one pair per line.
+The uselessness of each flag will be adjusted and written to this file 
+after each run of this script to help next runs to eliminate useless flags more quickly.
+
+Cache directory contains xml files that correspond to compilations made by this script.
+Sometimes it may become out of date, so you should delete the cache if the script
+asks you to.
+
+The results will look like this:
+\begin{lstlisting}
+BEFORE: (hash) /path/to/original.xml
+a huge list of flags
+
+AFTER: (hash) /path/to/new.xml
+a small list of flags
+
+Additional gcc runs: 1000
+Total runs (including cached): 100500
+\end{lstlisting}
+
+
+\chapter{TACT Scripts Reference\label{chapter-reference}}
+\begin{comment}
+\section{Deploying Application Source Code}
+Every test has two main directories - \texttt{\$APP\_DIR} (for application \texttt{app\_name} it's usually \texttt{\textasciitilde\slash{}tact\slash{}apps\slash{}app\_name}) and \texttt{\$TEST\_DIR} (for test \texttt{test\_name} it's usually \texttt{\$APP\_DIR\slash{}tests\slash{}test\_name})
+
+If you have common application source for all tests, then you should put application source code to \texttt{\$APP\_DIR\slash{}src} and make symlinks from all tests in \texttt{\$TEST\_DIR\slash{}src}. Or, if test has private application source just put this source to \texttt{\$TEST\_DIR\slash{}src}.
+
+Source of shared libraries for application should be in \texttt{\$APP\_DIR\slash{}shared\slash{}src}.
+\end{comment}
+
+\section{Script for Importing SPEC2000 Tests}
+The folder \texttt{\$TACT\_DIR/specstrap} contains scripts that import SPEC 2000 tests into TACT for tuning. To do that, the following steps are required:
+
+\begin{itemize}
+\item Configure TACT environment by running \texttt{`bin/set-env`}
+\item Export \texttt{SPEC\_DIR} environment variable with a path to your SPEC dir. e.g. \texttt{/home/username/spec2k}
+\item Run script \texttt{run.sh}
+\item Now you can find SPEC2K tests in \texttt{tact/apps} dir.
+\end{itemize}
+
+
+\section{Setup script}
+
+\texttt{\$TACT\_DIR/task\_manager/system\_setup} -- this script can automatically setup nfs and TACT user on all boards and intermediate servers. % Sample config provided in Chapter 2.
+\emph{The script is deprecated, and won't be supported in the future.}
+
+This script has 3 parts:
+\begin{itemize}
+\item\texttt{system\_setup -{}-export\_nfs} -- configures nfs on server.
+\item\texttt{system\_setup -{}-create\_users} -- creates users on all intermediate servers and target boards.
+\item\texttt{system\_setup -{}-create\_mounts} -- configures target boards and makes desired mounts and directory structure on them.
+\end{itemize}
+
+\section{Scripts Reference}
+
+All scripts can be divided in two groups -- application specific scripts, that are common for the whole application, and test specific scripts, that can differ on each test. 
+
+Main configure file for all scripts -- \texttt{\$TEST\_DIR/etc/tuning.conf}. Its options described in Section \ref{main_parameters} (main tuning parameters) and at the end of Section \ref{flag_parameters} (compiler flags).
+
+\subsection{Application-Specific Scripts}
+\begin{itemize}
+\item\texttt{\$APP\_DIR\slash{}bin\slash{}}compute-binary-hash -- compute binary hash of application.
+
+{\bfseries Parameters:}
+
+\texttt{POOL\_DIR} -- path to pool
+
+{\bfseries Result:}
+
+As a result this script should print to stdout md5 or other hash of application binary or library (*.so).
+
+\item\texttt{\$APP\_DIR\slash{}bin\slash{}}init-pool -- initial build of application
+
+{\bfseries Parameters:}
+\begin{itemize}
+\item \texttt{POOL\_DIR} -- path to pool
+\item \texttt{TEST\_DIR} -- path to test
+\item \texttt{FLAGS} -- compiler flags
+\end{itemize}
+
+{\bfseries Result:}
+
+This script should take application sources from \texttt{\$TEST\_DIR\slash{}src} build them in \texttt{\$POOL\_DIR\slash{}build} and then install to \texttt{\$POOL\_DIR\slash{}run}. Also this script should include \texttt{build-config} script from \texttt{\$TEST\_DIR\slash{}private-etc}, which contains build-time options.
+
+\item\texttt{\$APP\_DIR\slash{}bin\slash{}}init-shared -- initial build of shared libraries
+
+{\bfseries Parameters:}
+\begin{itemize}
+\item \texttt{APP\_DIR} -- path to application
+\item \texttt{TEST\_DIR} -- path to test
+\end{itemize}
+
+{\bfseries Result:}
+
+This script should take shared libraries sources from \texttt{\$APP\_DIR\slash{}shared\slash{}src} build them in \texttt{\$APP\_DIR\slash{}shared\slash{}build} and then install to \texttt{\$APP\_DIR\slash{}shared\slash{}run}. Also this script should include \texttt{\$TEST\_DIR\slash{}private-etc\slash{}build-config} script, which contains build-time options.
+
+\item\texttt{\$APP\_DIR\slash{}bin\slash{}}init-target -- target setup
+
+Contains actions that should be done on target before start tunung, for example, initialize ramdisc, prepare data for test or move cursor to the bottom of screen.
+
+\item\texttt{\$APP\_DIR\slash{}bin\slash{}}verify-results -- verify test results for errors and\slash{}or miscompile. Usually you don't need to edit this script.
+\end{itemize}
+
+\subsection{Test-Specific Scripts}
+\begin{itemize}
+\item\texttt{\$TEST\_DIR\slash{}bin\slash{}}compute-binary-hash -- compute binary hash of application
+
+{\bfseries Parameters:}
+
+\texttt{POOL\_DIR} -- path to pool
+
+{\bfseries Result:}
+
+As a result this script should print to stdout md5 or other hash of application binary or library (*.so). Usually it's symlink for \texttt{\$APP\_DIR\slash{}bin\slash{}compute-binary-hash}.
+
+\item\texttt{\$TEST\_DIR\slash{}bin\slash{}}compute-size -- compute binary size of application
+
+{\bfseries Parameters:}
+
+\texttt{POOL\_DIR} -- path to pool
+
+{\bfseries Result:}
+
+As a result this script should print to stdout size of application binary or library (*.so). Usually it's symlink for \texttt{\$APP\_DIR\slash{}bin\slash{}compute-size}.
+
+
+\item\texttt{\$TEST\_DIR\slash{}bin\slash{}}parse-results.rb -- class on Ruby for parsing results. 
+
+This class extends \texttt{ResultsParserBase}. You should rewrite \texttt{user\_handle\_\allowbreak single\_line} function for your test. This function takes each single line of test output as parameter and should determine when new test begin, test name and test result by parsing lines with regular expressions.
+
+\item\texttt{\$TEST\_DIR\slash{}bin\slash{}}rebuild-pool -- rebuild pool with new options.
+
+{\bfseries Parameters:}
+
+\begin{itemize}
+\item{}POOL\_DIR -- path to pool
+\item{}FLAGS -- list of flags
+\end{itemize}
+
+{\bfseries Result:}
+
+This script should delete sufficient object files and\slash{}or binaries and then rebuld pool in \texttt{\$POOL\_DIR} with given flags.
+
+\item\texttt{\$TEST\_DIR\slash{}bin\slash{}}target-run-test -- run test on target.
+
+{\bfseries Parameters:}
+
+\begin{itemize}
+\item{}POOL\_DIR -- path to pool
+\item{}REPETITIONS -- number of repetitions
+\end{itemize}
+
+{\bfseries Result:}
+
+This script runs test from \texttt{POOL\_DIR\slash{}run} on target \texttt{REPETITIONS} times. Usually you don't need to edit this script.
+
+\item\texttt{\$TEST\_DIR\slash{}etc\slash{}}tuning.conf -- configure file for tuning.
+
+In this file should be specified compiler options for tuning. Also this file has some TACT params, such as:
+\begin{itemize}
+\item\texttt{COMPILER} -- path to compiler installation dir
+\item\texttt{NUM\_GENERATIONS} -- number of generations
+\item\texttt{NUM\_POPULATIONS} -- number of populations in one generation
+\item\texttt{NUM\_TESTBOARDS} -- number of testboards
+\item\texttt{MEASURE} -- type of measure for test (performance, size or pareto)
+\item\texttt{MIGRATION\_RATE} -- migration rate
+\item\texttt{MUTATION\_RATE} -- mutation rate
+\item\texttt{POPULATION\_SIZE} -- number of entities in population
+\item\texttt{POPULATIONS} -- number of populations
+\item\texttt{THREADS\_PER\_TESTBOARD} -- number of threads for one testboard
+\end{itemize}
+Tact runtime options:
+\begin{itemize}
+\item\texttt{BOARD\_ID} -- id of board for tuning
+\item\texttt{DO\_PROFILING} -- do profiling when building pool
+\item\texttt{REPETITIONS} -- number of repetitions for running test
+\item\texttt{TIMEOUT} -- timeout for running all \texttt{REPETITIONS} on target. If \texttt{TIMEOUT} not specified then it will be no timeout for test.
+\end{itemize}
+Tact pareto options:
+\begin{itemize}
+\item\texttt{ARCHIVE\_SIZE} -- size of best entities archive
+\item\texttt{PARETO\_BEST\_SIZE} -- number of best entities, that will be found by clastering
+\end{itemize}
+
+
+\item\texttt{\$TEST\_DIR\slash{}etc\slash{}}test-descr.xml -- description of tests.
+
+This XML file describes names of tests, weights of tests and method how to count final result of test set.
+
+\item\texttt{\$TEST\_DIR\slash{}private-bin\slash{}}target-run-single-test -- run test on testboard for one time. 
+
+{\bfseries Parameters:}
+
+\begin{itemize}
+\item{}POOL\_DIR -- path to pool
+\item{}TEST\_NAME -- name of the test
+\end{itemize}
+
+{\bfseries Result:}
+
+This script should run \texttt{\$TEST\_NAME} from \texttt{\$POOL\_DIR} on target for one time and exit code should be the same with test, so command for running test should be last on script, or exit code should be saved e.g. if you run test as \texttt{run\_test}:
+\begin{lstlisting}
+run_test
+EXIT_CODE=$?
+# some other actions here
+...
+exit $EXIT_CODE
+\end{lstlisting}
+
+\item\texttt{\$TEST\_DIR\slash{}private-etc\slash{}}build-config -- compiler configure file. In this file compiler and common compilation options such as include\slash{}library flags, common compiler flags and common configure options are specified.
+
+\item\texttt{\$TEST\_DIR\slash{}private-etc\slash{}}build-functions -- useful functions for build shared libraries and pool. Usually you don't need to edit this script.
+
+\item\texttt{\$TEST\_DIR\slash{}private-etc\slash{}}test-set -- name of test set.
+
+\end{itemize}
+
+
+\begin{comment}
+
+\section{extract-options-from-gcc-config}
+
+This script reads gcc sources and tries to extract compile options and put
+them to the xml configuration file for TACT (\texttt{tuning.conf}).
+For example this line will create a file \texttt{./some/prefix/tuning.conf}:
+\begin{lstlisting}
+extract-options-from-gcc-config /path/to/gcc-4.5-20100603/ ./some/prefix/
+\end{lstlisting}
+Some options cannot be transformed automatically by the script, so you might want
+to edit the resulting file by hand. Also, this script has an ability to ignore options that are listed in
+\texttt{\$TACT\_DIR/etc/extract-gcc-options-ignore.txt}.
+
+
+\chapter{Troubleshooting}
+
+\section{Removing stale locks}
+rm pool/*/in_use
+\section{Resuming tuning from a crash}
+tact restart-tuning LAST_SUCCESSFULL_GENERATION_NUMBER
+\section{Problems while building and running applications}
+examine your build.log
+
+Tips and tricks
+
+ttr: average fitness should decrease
+watch-status
+Making tuning finish to a specified time
+\end{comment}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\end{document}
