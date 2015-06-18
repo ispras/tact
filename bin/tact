@@ -265,11 +265,10 @@ def handle_option_check
 	warnings = []
 
 	options.each { |option|
-	        option.help_name().each{ |name|
-	                if compiler_options[/#{name}/].nil?
-				warnings.push(name)
-	                end
-	        }
+                name = option.help_name()
+		if name.class == String and compiler_options[/#{name}/].nil?
+			warnings.push(name)
+	        end
 	}
 
 	if !warnings.empty?

@@ -26,7 +26,7 @@ class Reduce_by_score
     @prime = config.static_params[:prime]
     @baselines = config.static_params[:baselines]
     @recommended = Hash.new
-    @coefficent = nil
+    @coefficient = nil
     @reducing_process = Array.new
     @best_entity = nil
     @best_number = 0
@@ -68,11 +68,11 @@ class Reduce_by_score
 
   end
 
-  def set_coefficent_of_distance
+  def set_coefficient_of_distance
     if @from.performance_score < @from.binary_size
-      @coefficent = (@from.binary_size / @from.performance_score).to_i
+      @coefficient = (@from.binary_size / @from.performance_score).to_i
     else
-      @coefficent = (@from.performance_score / @from.binary_size).to_i    
+      @coefficient = (@from.performance_score / @from.binary_size).to_i    
     end
   end
 
@@ -113,7 +113,7 @@ class Reduce_by_score
       return
     end
     
-    set_coefficent_of_distance if @measure == "pareto"
+    set_coefficient_of_distance if @measure == "pareto"
 
     make_recommended_options_list
 
@@ -379,9 +379,9 @@ class Reduce_by_score
         perf_diff = original_entity.performance_score - new_entity.performance_score
 
         if new_entity.binary_size > new_entity.performance_score
-          new_entity.dist = sign_coef * Math.sqrt(size_diff**2 + (@coefficent * perf_diff)**2)
+          new_entity.dist = sign_coef * Math.sqrt(size_diff**2 + (@coefficient * perf_diff)**2)
         else
-          new_entity.dist = sign_coef * Math.sqrt(perf_diff**2 + (@coefficent * size_diff)**2)
+          new_entity.dist = sign_coef * Math.sqrt(perf_diff**2 + (@coefficient * size_diff)**2)
         end
       else 
         new_entity.dist = (new_entity.performance_score - original_entity.performance_score) * @direction

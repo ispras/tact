@@ -432,7 +432,7 @@ class ParetoPopulation < Population
 	  (compare_score(first, second, true) and compare_size(first, second, false))
   end
 
-  def set_coefficent_of_comparability(entities_set)
+  def set_coefficient_of_comparability(entities_set)
     #compute max(the worst) performance_score between @entities and @archive  
     
     max_perf = min_perf = entities_set[0].performance_score.to_f
@@ -458,20 +458,20 @@ class ParetoPopulation < Population
     size_diff = (max_size - min_size)
     performance_diff = (max_perf - min_perf)
     if size_diff > performance_diff
-      @coefficent = size_diff / performance_diff
+      @coefficient = size_diff / performance_diff
       return true
     else
       if size_diff.to_i == 0
         @coefficient = 1
       else	
-        @coefficent =  performance_diff / size_diff
+        @coefficient =  performance_diff / size_diff
       end
       return false
     end
   end
 
   def set_distances_between_entities
-    size_is_greater = set_coefficent_of_comparability(@entities + @archive)
+    size_is_greater = set_coefficient_of_comparability(@entities + @archive)
     (@entities + @archive).each{ |i|
       array = []
       (@entities + @archive).each{ |j|
@@ -532,26 +532,26 @@ class ParetoPopulation < Population
   end
 
   def euclidean_distance(entity1, entity2, size_is_greater)
-    @coefficient = 1 if @coefficient.nil?
-    perf_diff = (entity1.performance_score - entity2.performance_score)
-    size_diff = (entity1.binary_size - entity2.binary_size)
+    return 0 if @coefficient.nan?
+    perf_diff = (entity1.performance_score - entity2.performance_score).abs
+    size_diff = (entity1.binary_size - entity2.binary_size).abs
     if size_is_greater
-      dist = Math.sqrt((@coefficent*perf_diff)**2 + size_diff**2).to_i
+      dist = Math.sqrt((@coefficient*perf_diff)**2 + size_diff**2).to_i
     else
-      dist = Math.sqrt(perf_diff**2 + (@coefficent*size_diff)**2).to_i
+      dist = Math.sqrt(perf_diff**2 + (@coefficient*size_diff)**2).to_i
     end
 
     return dist
   end
  
   def euclidean_distance1(entity, pair, size_is_greater)
-    @coefficient = 1 if @coefficient.nil?
+    return 0 if @coefficient.nan?
     perf_diff = (entity.performance_score - pair[0]).abs
     size_diff = (entity.binary_size - pair[1]).abs
     if size_is_greater
-      dist = Math.sqrt((@coefficent*perf_diff)**2 + size_diff**2).to_i
+      dist = Math.sqrt((@coefficient*perf_diff)**2 + size_diff**2).to_i
     else
-      dist = Math.sqrt(perf_diff**2 + (@coefficent*size_diff)**2).to_i
+      dist = Math.sqrt(perf_diff**2 + (@coefficient*size_diff)**2).to_i
     end
 
     return dist
@@ -583,7 +583,7 @@ class ParetoPopulation < Population
         j += 1
       end
   
-      size_is_greater = set_coefficent_of_comparability(pareto_set)
+      size_is_greater = set_coefficient_of_comparability(pareto_set)
 
       #main step of algorithm
       iteration = 1
@@ -614,8 +614,8 @@ class ParetoPopulation < Population
             center[0] += entity.performance_score
             center[1] += entity.binary_size       
           }
-          center[0] /= cluster[1].size
-          center[1] /= cluster[1].size
+          center[0] /= cluster[1].size if cluster[1].size > 0
+          center[1] /= cluster[1].size if cluster[1].size > 0
           @centers.push(center)
         }
         iteration += 1

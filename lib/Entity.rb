@@ -89,7 +89,7 @@ class Entity
   def cross(second_entity)
     new_options = []
     (0...@options.size).each{ |i|
-        new_options.push(@options[i].cross(@second_entity.options[i]))
+        new_options.push(@options[i].cross(second_entity[i]))
     }
     return new_options    
   end
