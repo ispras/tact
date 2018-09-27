@@ -1,0 +1,18 @@
+#!/bin/sh
+
+# target-run-single-test > single-test-results
+# POOL_DIR - path to pool
+
+# This script should run the test using the executables from $POOL_DIR/run
+
+echo "This is decompress run"
+
+# It's very simple application, so print here one common hash value for each test run.
+#echo "HASH=123"
+
+cd $POOL_DIR/run
+rm -f rootfs.cpio
+time -p ./busybox lzma -d -k rootfs.cpio.lzma
+
+echo "HASH=`md5sum rootfs.cpio.lzma | awk '{print $1}'`"
+

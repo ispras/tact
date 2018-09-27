@@ -30,7 +30,7 @@ commands_help = { "-h" => "",
                   "package-run" => "Run package of applications"}
 
 # Mapping option name to option string
-option_strings = { "board" => "--flags FLAGS",
+option_strings = { "board" => "--board BOARD_ID",
 		   "dir" => "--dir PATH",
 		   "flags" => "--flags FLAGS",
 		   "file" => "--file FILE",
@@ -766,12 +766,11 @@ EOF
 		    end
 		  end
                 }
-	      }
-  
-              inner_threads.each { |aThread|
-                aThread.join
-              }
 
+                inner_threads.each { |aThread|
+                aThread.join
+                }
+              }
             }
           }
           threads.each{|aThread|

@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# target-run-test > results
+# POOL_DIR - path to pool
+# REPETITIONS - number of repetitions
+
+# This script runs tests $REPETITIONS times
+
+# The default implementation assumes that
+# there is a set of tests and a script that runs a test by its name
+# It is recommended to create a symlink to this implementation
+
+exit_code=0
+
+for i in `seq $REPETITIONS`; do
+    echo "REPETITION=$i"
+
+    for t in `cat $TEST_DIR/private-etc/test-set`; do
+        TEST_NAME="$t" $TEST_DIR/private-bin/target-run-single-test
+        c=$?
+        if [ $c -ne 0 ]; then
+            exit_code=$c
+        fi
+    done
+done
+
+exit $exit_code

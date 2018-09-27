@@ -1,0 +1,24 @@
+#!/bin/sh
+
+# rebuild-pool
+# POOL_DIR - path to pool
+# FLAGS - a list of flags
+
+# directory with private configs
+CONFIG_DIR="$TEST_DIR/private-etc"
+
+# remove binary
+rm -r $POOL_DIR/run/* 2> /dev/null
+export CC=/var/weny/TACT/x86_64_gcc6.2.0_glibc2.24.0/bin/x86_64-pc-linux-gnu-gcc
+export LD=/var/weny/TACT/x86_64_gcc6.2.0_glibc2.24.0/bin/x86_64-pc-linux-gnu-ld
+export CFLAGS=" -Wall -I. -std=gnu99 -s $FLAGS -march=core-avx-i -mtune=core-avx-i -static "
+
+# build new binary with give $FLAGS
+cd $POOL_DIR/build/
+make clean &&
+  make CC=${CC} $MAKE_FLAGS V=1 &&
+  sync &&
+  cp busybox rootfs.cpio.lzma $POOL_DIR/run/ &&
+  sync
+
+

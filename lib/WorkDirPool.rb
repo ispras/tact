@@ -48,10 +48,10 @@ def initialize
 @lock_file = nil
 end
 def CriticalSection.enter
-#    $mutex.synchronize do
-if !defined?(@lock_file) or !@lock_file then @lock_file = File.open(__FILE__) end
-#    end
-@lock_file.flock(File::LOCK_EX)
+  $mutex.synchronize do
+    if !defined?(@lock_file) or !@lock_file then @lock_file = File.open(__FILE__) end
+  end
+  @lock_file.flock(File::LOCK_EX)
 end
 
 def CriticalSection.leave
@@ -100,7 +100,12 @@ class WorkDirPool
     for name in ["build", "progress", "run", "checksum" ] do
       begin
 	filename = "#{work_dir}/log/#{name}.log"
-	File.unlink(filename) if File.exist?(filename)
+	begin
+          File.unlink(filename) if File.exist?(filename)
+        rescue Exception
+          sleep 1
+          retry
+        end
       end
     end
   end
@@ -116,7 +121,12 @@ class WorkDirPool
 	CriticalSection.enter
 
 	lock = work_dir + '/in_use'
-	File.unlink(lock) if File.exist?(lock)
+	begin
+	  File.unlink(lock) if File.exist?(lock)
+        rescue Exception
+          sleep 0.1
+          retry
+	end
       ensure
 	CriticalSection.leave
       end

@@ -278,6 +278,7 @@ class Float_param < GCC_flag
     else
         new_option = self.clone
         new_option.value = (@value + second_option.value)/2.0
+        return new_option
     end
   end
 

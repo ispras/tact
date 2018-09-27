@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# compute-size
+# path to current pool is $1
+
+# This script should print out a size of one binary/library file
+
+ls -l "$1/run/tutorial" | head -n 1 | awk '{print $5}'

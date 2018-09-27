@@ -1,0 +1,21 @@
+#!/bin/sh
+
+# init-pool
+# POOL_DIR - path to pool
+# TEST_DIR - path to test dir
+# CC - compiler
+# FLAGS - compiler flags
+
+mkdir $POOL_DIR/run 2> /dev/null
+mkdir $POOL_DIR/build 2> /dev/null
+
+export CC=/var/weny/TACT/x86_64_gcc6.2.0_glibc2.24.0/bin/x86_64-pc-linux-gnu-gcc
+export CFLAGS=" -O2  -I/run/include   -Wall -I. -std=gnu99 -s -static "
+
+cp -r $APP_DIR/src/* $POOL_DIR/build &&
+cp -r $APP_DIR/src/.config $POOL_DIR/build &&
+cd $POOL_DIR/build &&
+make clean &&
+make CC=${CC}  && 
+cp busybox rootfs.cpio.lzma  $POOL_DIR/run/
+

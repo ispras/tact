@@ -3,6 +3,12 @@
 class AppResultsParser < ResultsParserBase
 
     def user_handle_single_line(line)
+          # Extract test hash
+          matches = line.match(/^HASH=(.+)$/)
+          if matches && matches.length == 2
+             store_current_value('hash', matches[1])
+          end
+
           # Extract test value and begin new test
           matches = line.match(/^(\d+)\s-\s(slow|normal|fast|very fast)/)
           if matches && matches.length == 3

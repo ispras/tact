@@ -57,7 +57,7 @@ class Reduce_by_binary_hash
         entity = nil
         xml_doc = Document.new(File.new(xml))
         XPath.each(xml_doc, "//benchmark_run") do |r|
-          string = r.attributes['compile_str'].match(/^(#{@prime}|#{@baselines[0]})(.*)$/)[2]
+          string = r.attributes['compile_str'].match(/^(#{@prime}|#{@baselines[0]})(.*)$/).to_s
           entity = Entity.new(@options, " " + string, true )
           entity.binary_hash = r.attributes['binary_hash']
           entity.file_name = xml          

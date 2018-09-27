@@ -80,7 +80,12 @@ class ResultsParserBase
 	if (file == '-')
 	  @input = $stdin
 	else
-	  @input = File.open(file, 'r')
+          begin
+             @input = File.open(file, 'r')
+             rescue Exception
+                 sleep 1
+             retry
+          end
 	end
 
 	@current_test_data = Hash.new

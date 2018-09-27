@@ -532,7 +532,7 @@ class ParetoPopulation < Population
   end
 
   def euclidean_distance(entity1, entity2, size_is_greater)
-    return 0 if @coefficient.nan?
+    return 0 if @coefficient.to_f.nan?
     perf_diff = (entity1.performance_score - entity2.performance_score).abs
     size_diff = (entity1.binary_size - entity2.binary_size).abs
     if size_is_greater
@@ -545,7 +545,7 @@ class ParetoPopulation < Population
   end
  
   def euclidean_distance1(entity, pair, size_is_greater)
-    return 0 if @coefficient.nan?
+    return 0 if @coefficient.to_f.nan?
     perf_diff = (entity.performance_score - pair[0]).abs
     size_diff = (entity.binary_size - pair[1]).abs
     if size_is_greater
@@ -697,7 +697,8 @@ class ParetoPopulationJoint < ParetoPopulation
     @archive_size = conf.static_params[:archive_size] 
     @tuning_process = false
     @greater_is_better = conf.runtime_params[:greater_is_better]
-    @basepath = conf.static_params[:basepath] 
+    @basepath = conf.static_params[:basepath]
+    @measure = conf.runtime_params[:measure]
   end
 end				
 

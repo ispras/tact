@@ -5,6 +5,14 @@
 
 # Custom handler is needed for ruby to pass SIGINT into process executed with system()
 Signal.trap("INT") do
+    thread_count = 0
+    Thread.list.each do |t|
+      thread_count += 1
+      err_msg = "[DEBUG] thread #{thread_count} of total #{Thread.list.size} backtrace:\n"
+      err_msg += t.backtrace.join("\n")
+      err_msg += "\n\n"
+      puts(err_msg)
+    end
   raise Interrupt, "SIGINT catched"
 end
 
@@ -267,9 +275,15 @@ class TestRunner
     end
    
     #write everything needed to file to execute on test board
-    file = File.new("#{@work_dir}/board_run", 'w', 0744)
-  
-    file.puts("#!/bin/bash")
+    begin
+      file = File.new("#{@work_dir}/board_run", 'w', 0744)
+    rescue Exception
+      puts "[DEBUG] create file failed! file:{@work_dir}/board_run."
+      sleep 0.2
+      retry
+    end
+ 
+    file.puts("#!/bin/sh")
     file.puts("echo -n '=== Start (test board time): '; date")
     if @timeout > 0
       file.puts("current_pid=$$")
@@ -392,11 +406,14 @@ class TestRunner
   
   # Write to results collection
   def write_results_log(val, compile_options, generation_num, population_num)
-    CriticalSection.enter
+    begin
+      CriticalSection.enter
       results_log=File.new("#{@test_dir}/log/current/results.log", "a")
       results_log.puts("#{val}\t#{generation_num}\t#{population_num}\t'#{@compile_options}'")
       results_log.close
-    CriticalSection.leave
+    ensure
+      CriticalSection.leave
+    end
   end
 
   ###########################################################
